@@ -39,7 +39,7 @@ CATALOGS: dict[str, tuple[type, list[str]]] = {
     ]),
     "staff": (StaffPosition, ["id", "code", "name", "is_active"]),
     "vehicles": (VehiclePlate, ["id", "plate_number", "vehicle_type", "is_active"]),
-    "vehicle_types": (VehicleType, ["id", "code", "name", "sort_order"]),
+    "vehicle_types": (VehicleType, ["id", "code", "name", "sort_order", "dimensions_label"]),
     "roles": (Role, ["id", "code", "name"]),
 }
 
@@ -136,7 +136,10 @@ def list_catalog(catalog: str):
     if not _check_ref_access(catalog):
         return {"error": "forbidden"}, 403
     model, fields = spec
-    rows = model.query.order_by(model.id).limit(500).all()
+    if catalog == "vehicle_types":
+        rows = model.query.order_by(VehicleType.sort_order, VehicleType.id).limit(500).all()
+    else:
+        rows = model.query.order_by(model.id).limit(500).all()
     return {"items": [_serialize(r, fields) for r in rows]}
 
 

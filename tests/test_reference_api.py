@@ -43,3 +43,29 @@ def test_reference_units_list(auth_client, client):
     resp = client.get("/api/reference/units")
     assert resp.status_code == 200
     assert len(resp.json["items"]) >= 1
+
+
+def test_reference_vehicle_types_crud(auth_client, client):
+    auth_client("admin@test.local", "admin")
+    create = client.post(
+        "/api/reference/vehicle_types",
+        json={
+            "code": "test_van",
+            "name": "Тестовый фургон",
+            "sort_order": 500,
+            "dimensions_label": "5,0×2,0×2,0",
+        },
+    )
+    assert create.status_code == 201
+    vid = create.json["id"]
+    assert create.json["dimensions_label"] == "5,0×2,0×2,0"
+
+    update = client.put(
+        f"/api/reference/vehicle_types/{vid}",
+        json={"dimensions_label": "5,1×2,1×2,1"},
+    )
+    assert update.status_code == 200
+    assert update.json["dimensions_label"] == "5,1×2,1×2,1"
+
+    delete = client.delete(f"/api/reference/vehicle_types/{vid}")
+    assert delete.status_code == 200

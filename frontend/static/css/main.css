@@ -47,7 +47,17 @@ body {
   padding: 1.5rem;
 }
 
-header h1 { margin-top: 0; }
+.pls-main--wide {
+  max-width: none;
+  width: 100%;
+  padding: 1rem 1.25rem;
+  box-sizing: border-box;
+}
+
+.page-title {
+  margin-top: 0;
+  font-size: 1.25rem;
+}
 
 .status.error { color: #b00020; }
 .muted { color: #666; font-size: 0.95rem; }
@@ -105,27 +115,91 @@ header h1 { margin-top: 0; }
   max-width: 100%;
 }
 
+/* Транспортная смена — компактная таблица на всю ширину экрана */
+.uss-transport .transport-table-wrap {
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.uss-transport .transport-wide-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  font-size: 0.78rem;
+  border-collapse: collapse;
+}
+
+.uss-transport .transport-wide-table th,
+.uss-transport .transport-wide-table td {
+  padding: 0.2rem 0.25rem;
+  vertical-align: top;
+  overflow: hidden;
+  line-height: 1.2;
+}
+
+.uss-transport .transport-wide-table input,
+.uss-transport .transport-wide-table select {
+  min-width: 0;
+  width: 100%;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.25rem;
+  box-sizing: border-box;
+}
+
+.uss-transport .transport-wide-table .col-plate { width: 5.5%; }
+.uss-transport .transport-wide-table .col-op { width: 6.5%; }
+.uss-transport .transport-wide-table .col-waybill { width: 7%; }
+.uss-transport .transport-wide-table .col-mx { width: 6%; }
+.uss-transport .transport-wide-table .col-type { width: 9%; }
+.uss-transport .transport-wide-table .col-seal { width: 5%; }
+.uss-transport .transport-wide-table .col-torg2 { width: 5%; }
+.uss-transport .transport-wide-table .col-vol { width: 4%; }
+.uss-transport .transport-wide-table .col-handling { width: 7%; }
+.uss-transport .transport-wide-table .col-time { width: 5%; }
+.uss-transport .transport-wide-table .col-qty { width: 4.5%; }
+.uss-transport .transport-wide-table .col-tariff { width: 5.5%; }
+.uss-transport .transport-wide-table .col-actions { width: 4.5%; }
+
+.uss-transport .transport-wide-table th {
+  font-weight: 600;
+  font-size: 0.74rem;
+  line-height: 1.25;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  vertical-align: bottom;
+}
+
+.uss-transport .transport-wide-table .col-actions button {
+  padding: 0.25rem 0.4rem;
+  font-size: 0.72rem;
+  white-space: normal;
+  line-height: 1.15;
+}
+
 .waybills-block {
-  min-width: 14rem;
-}
-
-.waybill-line {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.waybills-col .waybill-line {
+  display: flex;
+  flex-direction: row;
+  gap: 0.2rem;
   align-items: center;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2rem;
 }
 
-.waybill-line input {
-  flex: 1 1 5rem;
-  min-width: 4rem;
+.waybills-col .waybill-line input {
+  flex: 1;
+  min-width: 0;
 }
 
-.waybill-line .mx-label {
-  font-size: 0.75rem;
-  color: #666;
-  white-space: nowrap;
+.tariff-hint {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.85rem;
 }
 
 .btn-link {

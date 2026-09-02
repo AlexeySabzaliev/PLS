@@ -39,7 +39,15 @@ _VEHICLE_FIELDS = (
 
 def _list_vehicle_types() -> list[dict]:
     rows = VehicleType.query.order_by(VehicleType.sort_order, VehicleType.id).all()
-    return [{"id": r.id, "code": r.code, "name": r.name} for r in rows]
+    return [
+        {
+            "id": r.id,
+            "code": r.code,
+            "name": r.name,
+            "dimensions_label": r.dimensions_label,
+        }
+        for r in rows
+    ]
 
 
 def _parse_time_on_date(op_date: date, value) -> datetime | None:
@@ -118,6 +126,7 @@ def _serialize_vehicle(row: VehicleOperation, waybills_map: dict[int, list[dict]
     op_type, handling = _legacy_fix_operation_handling(row)
     rq = dict(row.report_quantities or {})
     waybills = waybills_map.get(row.id) or waybills_from_legacy_row(row)
+    vt = db.session.get(VehicleType, row.vehicle_type_id) if row.vehicle_type_id else None
     return {
         "id": row.id,
         "contract_id": row.contract_id,
@@ -127,6 +136,8 @@ def _serialize_vehicle(row: VehicleOperation, waybills_map: dict[int, list[dict]
         "trailer_plate": trailer,
         "operation_type_code": op_type or "inbound",
         "vehicle_type_id": row.vehicle_type_id,
+        "vehicle_type_name": vt.name if vt else None,
+        "dimensions_label": vt.dimensions_label if vt else None,
         "waybills": waybills,
         "waybill_number": row.waybill_number,
         "mx1_number": row.mx1_number,

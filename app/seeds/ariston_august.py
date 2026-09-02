@@ -100,6 +100,34 @@ def _operation_type(op_type: str | None) -> str:
   return "inbound"
 
 
+def _waybill_key(value: str | None) -> str:
+  """Ключ накладной как в Billings (первая часть до пробела)."""
+  s = (value or "").strip()
+  return s.split()[0] if s else ""
+
+
+def _merge_vehicle_volumes(
+  vo: VehicleOperation,
+  *,
+  vol: Decimal,
+  in_manual: Decimal,
+  in_mech: Decimal,
+  out_manual: Decimal,
+  out_mech: Decimal,
+  handling: str | None,
+) -> None:
+  """Слить объёмы второй строки ПРР в существующую операцию (дубль накладной/даты)."""
+  rq = dict(vo.report_quantities or {})
+  rq["inbound_manual_m3"] = float(_dec(rq.get("inbound_manual_m3", 0)) + in_manual)
+  rq["outbound_manual_m3"] = float(_dec(rq.get("outbound_manual_m3", 0)) + out_manual)
+  rq["inbound_mech_m3"] = float(_dec(rq.get("inbound_mech_m3", 0)) + in_mech)
+  rq["outbound_mech_m3"] = float(_dec(rq.get("outbound_mech_m3", 0)) + out_mech)
+  vo.report_quantities = rq
+  vo.volume_document_m3 = float(_dec(vo.volume_document_m3) + vol)
+  if handling and not vo.handling_type_code:
+    vo.handling_type_code = handling
+
+
 def _mx_value(raw, waybill: str | None) -> str | None:
   mx = _str_cell(raw)
   if not mx:
@@ -149,8 +177,14 @@ def _apply_vehicle_billing_extras(
   elco_total = int(billing_lines.get("elco_passports", {}).get("qty", 0))
   if extra_total <= 0 and elco_total <= 0:
     return
+  start, end = date(YEAR, MONTH, 1), date(YEAR, MONTH, 31)
   vehicles = (
-    VehicleOperation.query.filter_by(contract_id=contract_id, warehouse_id=warehouse_id)
+    VehicleOperation.query.filter(
+      VehicleOperation.contract_id == contract_id,
+      VehicleOperation.warehouse_id == warehouse_id,
+      VehicleOperation.operation_date >= start,
+      VehicleOperation.operation_date <= end,
+    )
     .order_by(VehicleOperation.operation_date, VehicleOperation.id)
     .all()
   )
@@ -257,6 +291,7 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
   _clear_august_ops(contract.id, wh.id)
 
   op_days: list[date] = []
+  by_waybill_day: dict[tuple[date, str], VehicleOperation] = {}
   for raw in read_prr_rows(path):
     day = _to_date(raw.get("operation_date"))
     if not day or day.month != MONTH:
@@ -276,6 +311,26 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
     handling = infer_handling_from_volumes(in_manual, in_mech, out_manual, out_mech) or None
     waybill = _str_cell(raw.get("waybill"))
     mx = _mx_value(raw.get("mx1") if op_type == "inbound" else raw.get("mx3"), waybill)
+    wb_key = _waybill_key(waybill)
+    merge_key = (day, wb_key) if wb_key else None
+    if merge_key and merge_key in by_waybill_day:
+      _merge_vehicle_volumes(
+        by_waybill_day[merge_key],
+        vol=vol,
+        in_manual=in_manual,
+        in_mech=in_mech,
+        out_manual=out_manual,
+        out_mech=out_mech,
+        handling=handling,
+      )
+      if waybill or mx:
+        replace_waybills(
+          by_waybill_day[merge_key].id,
+          [{"waybill_number": waybill or "", "mx_number": mx or ""}],
+          op_type,
+        )
+      op_days.append(day)
+      continue
 
     vo = VehicleOperation(
         contract_id=contract.id,
@@ -300,6 +355,8 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
     )
     db.session.add(vo)
     db.session.flush()
+    if merge_key:
+      by_waybill_day[merge_key] = vo
     if waybill or mx:
       replace_waybills(vo.id, [{"waybill_number": waybill or "", "mx_number": mx or ""}], op_type)
     stats["vehicles"] += 1

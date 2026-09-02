@@ -14,6 +14,7 @@
     tariff_rules: 'Ставки (tariff_rules)',
     staff: 'Должности',
     vehicles: 'ТС (госномера)',
+    vehicle_types: 'Типы ТС (объём / габариты)',
     roles: 'Роли',
   };
 
@@ -44,7 +45,8 @@
     valid_from: 'Ставка с',
     valid_to: 'Ставка до',
     plate_number: 'Гос. номер',
-    vehicle_type: 'Тип ТС',
+    vehicle_type: 'Тип ТС (текст)',
+    dimensions_label: 'Габариты, м',
   };
 
   let meta = [];
@@ -101,6 +103,10 @@
     const readOnly = cat.read_only;
 
     let html = `<h2>${esc(LABELS[current] || current)}</h2>`;
+    if (current === 'vehicle_types') {
+      html += '<p class="muted">Справочник для колонки «Тип ТС» в транспортной смене. '
+        + 'Габариты — строка вида <code>13,6×2,45×2,70</code> (длина×ширина×высота, м).</p>';
+    }
     if (readOnly) {
       html += '<p class="muted">Только просмотр</p>';
     }

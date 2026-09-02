@@ -45,7 +45,9 @@ const UssApi = {
       (options.vehicleTypes || []).forEach((vt) => {
         const o = document.createElement('option');
         o.value = String(vt.id);
-        o.textContent = vt.name;
+        const dims = (vt.dimensions_label || '').trim();
+        o.textContent = dims ? `${vt.name} — ${dims}` : vt.name;
+        o.title = dims ? `${vt.name}, габариты ${dims} м` : vt.name;
         el.appendChild(o);
       });
       el.value = value != null && value !== '' ? String(value) : '';
@@ -76,66 +78,84 @@ const UssApi = {
     return opType === 'outbound' ? 'МХ-3' : 'МХ-1';
   },
 
-  renderWaybillsBlock(waybills, opType, editable = true) {
-    const wrap = document.createElement('div');
-    wrap.className = 'waybills-block';
-    const lines = (waybills && waybills.length) ? waybills : [{ waybill_number: '', mx_number: '' }];
-    const mxLabel = UssApi.mxFieldLabel(opType || 'inbound');
+  createWaybillsEditor(initialWaybills, opType, editable = true) {
+    let lines = (initialWaybills && initialWaybills.length)
+      ? initialWaybills.map((w) => ({ ...w }))
+      : [{ waybill_number: '', mx_number: '' }];
+    let operationType = opType || 'inbound';
 
-    function addLine(wb = { waybill_number: '', mx_number: '' }) {
-      const line = document.createElement('div');
-      line.className = 'waybill-line';
-      const wbInp = document.createElement('input');
-      wbInp.dataset.wb = 'waybill';
-      wbInp.placeholder = '№ накладной';
-      wbInp.value = wb.waybill_number || '';
-      const mxLbl = document.createElement('span');
-      mxLbl.className = 'mx-label';
-      mxLbl.textContent = mxLabel;
-      const mxInp = document.createElement('input');
-      mxInp.dataset.wb = 'mx';
-      mxInp.placeholder = mxLabel;
-      mxInp.value = wb.mx_number || '';
-      line.appendChild(wbInp);
-      line.appendChild(mxLbl);
-      line.appendChild(mxInp);
-      if (editable) {
-        const rm = document.createElement('button');
-        rm.type = 'button';
-        rm.className = 'btn-link btn-remove-wb';
-        rm.textContent = '×';
-        rm.title = 'Удалить накладную';
-        rm.addEventListener('click', () => line.remove());
-        line.appendChild(rm);
-      }
-      wrap.appendChild(line);
-    }
+    const waybillCol = document.createElement('div');
+    waybillCol.className = 'waybills-col waybills-col-waybill';
+    const mxCol = document.createElement('div');
+    mxCol.className = 'waybills-col waybills-col-mx';
 
-    lines.forEach(addLine);
-    if (editable) {
-      const add = document.createElement('button');
-      add.type = 'button';
-      add.className = 'btn-link btn-add-wb';
-      add.textContent = '+ накладная';
-      add.addEventListener('click', () => addLine());
-      wrap.appendChild(add);
-    }
-    wrap.updateMxLabels = (newOp) => {
-      const lbl = UssApi.mxFieldLabel(newOp || 'inbound');
-      wrap.querySelectorAll('.mx-label').forEach((n) => { n.textContent = lbl; });
-      wrap.querySelectorAll('input[data-wb="mx"]').forEach((n) => { n.placeholder = lbl; });
-    };
-    wrap.collect = () => {
-      const out = [];
-      wrap.querySelectorAll('.waybill-line').forEach((line) => {
-        out.push({
-          waybill_number: line.querySelector('[data-wb="waybill"]')?.value || '',
-          mx_number: line.querySelector('[data-wb="mx"]')?.value || '',
-        });
+    function render() {
+      waybillCol.innerHTML = '';
+      mxCol.innerHTML = '';
+      const mxPh = UssApi.mxFieldLabel(operationType);
+      lines.forEach((wb, idx) => {
+        const wbLine = document.createElement('div');
+        wbLine.className = 'waybill-line';
+        const wbInp = document.createElement('input');
+        wbInp.type = 'text';
+        wbInp.placeholder = '№ накладной';
+        wbInp.value = wb.waybill_number || '';
+        wbInp.addEventListener('input', () => { lines[idx].waybill_number = wbInp.value; });
+        wbLine.appendChild(wbInp);
+        if (editable) {
+          const rm = document.createElement('button');
+          rm.type = 'button';
+          rm.className = 'btn-link btn-remove-wb';
+          rm.textContent = '×';
+          rm.title = 'Удалить накладную';
+          rm.addEventListener('click', () => {
+            lines.splice(idx, 1);
+            if (!lines.length) lines.push({ waybill_number: '', mx_number: '' });
+            render();
+          });
+          wbLine.appendChild(rm);
+        }
+        waybillCol.appendChild(wbLine);
+
+        const mxLine = document.createElement('div');
+        mxLine.className = 'waybill-line';
+        const mxInp = document.createElement('input');
+        mxInp.type = 'text';
+        mxInp.placeholder = mxPh;
+        mxInp.value = wb.mx_number || '';
+        mxInp.addEventListener('input', () => { lines[idx].mx_number = mxInp.value; });
+        mxLine.appendChild(mxInp);
+        mxCol.appendChild(mxLine);
       });
-      return out;
+      if (editable) {
+        const add = document.createElement('button');
+        add.type = 'button';
+        add.className = 'btn-link btn-add-wb';
+        add.textContent = '+ накладная';
+        add.addEventListener('click', () => {
+          lines.push({ waybill_number: '', mx_number: '' });
+          render();
+        });
+        waybillCol.appendChild(add);
+      }
+    }
+
+    render();
+
+    return {
+      waybillCol,
+      mxCol,
+      updateOpType(newOp) {
+        operationType = newOp || 'inbound';
+        render();
+      },
+      collect() {
+        return lines.map((w) => ({
+          waybill_number: (w.waybill_number || '').trim(),
+          mx_number: (w.mx_number || '').trim(),
+        }));
+      },
     };
-    return wrap;
   },
 
   renderPeriodForm(container, schema, totals, onSave) {

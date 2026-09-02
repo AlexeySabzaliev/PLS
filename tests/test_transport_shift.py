@@ -38,12 +38,18 @@ def test_transport_schema_has_operation_select(auth_client, client):
     auth_client("transport@test.local", "test")
     resp = client.get("/api/uss/transport/shift?warehouse_id=1&date=2026-08-01")
     fields = resp.json["schemas"]["1"]["vehicle_fixed_fields"]
+    field_names = [f["field"] for f in fields]
+    assert "waybill_numbers" in field_names
+    assert "mx_numbers" in field_names
+    assert "extra_document_set_qty" not in field_names
     op = next(f for f in fields if f["field"] == "operation_type_code")
     handling = next(f for f in fields if f["field"] == "handling_type_code")
     assert op["input_type"] == "select"
     assert handling["input_type"] == "select"
     assert any(c["value"] == "inbound" for c in op["choices"])
     assert any(c["value"] == "manual" for c in handling["choices"])
+    tariff_codes = [t["billing_line_code"] for t in resp.json["schemas"]["1"]["vehicle_inputs"]]
+    assert "extra_vehicle_docs_rf" in tariff_codes
 
 
 def test_save_vehicle_report_quantities(auth_client, client):

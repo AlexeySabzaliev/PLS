@@ -1,10 +1,12 @@
 {% extends "uss/base.html" %}
 {% block title %}Транспорт{% endblock %}
+{% block body_class %}uss-transport{% endblock %}
+{% block main_class %}pls-main--wide{% endblock %}
 {% block content %}
-  <h1>Транспортная смена</h1>
+  <h1 class="page-title">Транспортная смена</h1>
   <p id="status" class="status">Загрузка…</p>
   <div id="toolbar"></div>
-  <div id="content"></div>
+  <div id="content" class="transport-content"></div>
 {% endblock %}
 {% block scripts %}
   <script src="/static/js/uss_transport.js"></script>

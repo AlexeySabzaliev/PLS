@@ -22,12 +22,12 @@ USS_SECTIONS: dict[str, frozenset[str]] = {
     "admin": frozenset({
         "uss_admin", "uss_catalog_clients", "uss_catalog_contracts",
         "uss_catalog_amendments", "uss_catalog_locations", "uss_catalog_rates",
-        "uss_catalog_staff", "uss_catalog_vehicles", "uss_ops_transport",
+        "uss_catalog_staff", "uss_catalog_vehicles", "uss_catalog_vehicle_types", "uss_ops_transport",
         "uss_ops_warehouse", "uss_ops_inventory", "uss_billing",
         "uss_process_lines",
     }),
     "supervisor": frozenset({"uss_admin", "uss_catalog_locations", "uss_process_lines"}),
-    "transport_logistics": frozenset({"uss_ops_transport", "uss_catalog_vehicles"}),
+    "transport_logistics": frozenset({"uss_ops_transport", "uss_catalog_vehicles", "uss_catalog_vehicle_types"}),
     "warehouse_logistics": frozenset({"uss_ops_warehouse"}),
     "inventory_management": frozenset({"uss_ops_inventory"}),
     "commercial_logistics": frozenset({

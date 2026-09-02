@@ -113,6 +113,7 @@ class VehicleType(db.Model):
     code = db.Column(db.String(64), unique=True, nullable=False)
     name = db.Column(db.String(256), nullable=False)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
+    dimensions_label = db.Column(db.String(128))
 
 
 class Role(db.Model):

@@ -9,6 +9,7 @@ from app.modules.uss.services.tariff_quantity import (
     apply_tariff_defaults,
     effective_quantity_source,
     is_inventory_area_tariff,
+    is_transport_field_code,
     needs_manual_daily_input,
     needs_manual_inventory_input,
     needs_manual_vehicle_input,
@@ -27,8 +28,9 @@ TRANSPORT_FIXED_FIELDS = [
             {"value": "outbound", "label": "Отгрузка"},
         ],
     },
-    {"field": "waybills", "label": "Накладные", "input_type": "waybills"},
-    {"field": "vehicle_type_id", "label": "Тип ТС", "input_type": "vehicle_type"},
+    {"field": "waybill_numbers", "label": "Накладная, №", "input_type": "waybill_column"},
+    {"field": "mx_numbers", "label": "МХ-1 / МХ-3, №", "input_type": "mx_column"},
+    {"field": "vehicle_type_id", "label": "Тип ТС (объём / габариты)", "input_type": "vehicle_type"},
     {"field": "seal_number", "label": "Пломба, №", "input_type": "text"},
     {"field": "torg2_number", "label": "Торг-2, №", "input_type": "text"},
     {"field": "volume_document_m3", "label": "Объём, м³", "input_type": "number"},
@@ -45,8 +47,34 @@ TRANSPORT_FIXED_FIELDS = [
     {"field": "extra_handling_m3", "label": "Доп. обработка, м³", "input_type": "number"},
     {"field": "registered_at", "label": "Прибытие", "input_type": "time"},
     {"field": "departed_at", "label": "Убытие", "input_type": "time"},
-    {"field": "extra_document_set_qty", "label": "Доп. комплект", "input_type": "number"},
 ]
+
+_EXTRA_DOC_FIELD = {
+    "field": "extra_document_set_qty",
+    "label": "Доп. комплект документов",
+    "input_type": "number",
+}
+
+
+def _transport_fixed_fields(role_tariffs: list[dict]) -> list[dict]:
+    """Базовые поля ТС + «Доп. комплект» только если нет разбивки по ставкам ДС."""
+    fields = list(TRANSPORT_FIXED_FIELDS)
+    manual_codes = {
+        t["billing_line_code"]
+        for t in role_tariffs
+        if needs_manual_vehicle_input(t)
+    }
+    # Аристон и др.: RF/RB/ELCO — отдельные ручные колонки по ставкам договора
+    if manual_codes & {"extra_vehicle_docs_rf", "extra_vehicle_docs_rb", "elco_passports"}:
+        return fields
+    # Общий случай: одно поле → ставка extra_vehicle_docs
+    if any(
+        is_transport_field_code(t.get("billing_line_code"))
+        or t.get("billing_line_code") == "extra_vehicle_docs"
+        for t in role_tariffs
+    ):
+        return [*fields, dict(_EXTRA_DOC_FIELD)]
+    return fields
 
 
 def _active_tariffs(contract_id: int, on_date: date) -> list[dict]:
@@ -162,7 +190,13 @@ def schema_for_contract_role(contract_id: int, on_date: date, role: str) -> dict
         "vehicle_fixed_fields": [],
     }
     if role == "transport_logistics":
-        schema["vehicle_fixed_fields"] = list(TRANSPORT_FIXED_FIELDS)
+        schema["vehicle_fixed_fields"] = _transport_fixed_fields(role_tariffs)
+        manual = schema["vehicle_inputs"]
+        schema["vehicle_tariff_hint"] = (
+            "Дополнительные тарифицируемые поля по ставкам договора (ввод на строке ТС):"
+            if manual
+            else None
+        )
     return schema
 
 

@@ -29,6 +29,7 @@ def test_transport_shift_includes_vehicle_types(auth_client, client):
     assert resp.status_code == 200
     types = resp.json.get("vehicle_types") or []
     assert any(t["code"] == "truck" for t in types)
+    assert any(t.get("dimensions_label") for t in types)
 
 
 def test_sync_security_mock(auth_client, client, monkeypatch):

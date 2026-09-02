@@ -5,10 +5,11 @@ import calendar
 import json
 from dataclasses import asdict, dataclass
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from app.modules.billing.aggregates import sum_daily_totals_by_code, sum_vehicle_report_quantities
+from app.modules.uss.services.tariff_billing import operational_to_billing_quantity
 from app.modules.uss.services.tariff_codes import (
     AREA_LINE_CODES,
     BILLING_MERGE_INTO,
@@ -75,6 +76,23 @@ def _effective_rate(t: dict) -> Decimal:
     if t.get("rate_ex_vat") is not None:
         return _d(t["rate_ex_vat"])
     return _d(t["rate"])
+
+
+def _charge_rate_and_quantity(
+    tariffs: list[dict],
+    tariff: dict,
+    operational_qty: Decimal,
+    on_date: date,
+) -> tuple[Decimal, Decimal]:
+    """Ставка и кол-во для суммы (учёт rate_line_code и quantity_divisor, как в Excel)."""
+    rate_code = (tariff.get("rate_line_code") or "").strip()
+    if rate_code:
+        bill_code, bill_qty = operational_to_billing_quantity(tariff, operational_qty)
+        rate_tariff = _tariff_for_line(tariffs, bill_code, on_date) or tariff
+        rate = _effective_rate(rate_tariff)
+        bill_qty = bill_qty.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return rate, bill_qty
+    return _effective_rate(tariff), operational_qty
 
 
 def _tariff_segments(
@@ -514,13 +532,13 @@ class StorageBillingStrategy:
             first_t = segments[0][3]
 
             for seg_start, seg_end, _seg_days, t in segments:
-                rate = _effective_rate(t)
                 seg_qty = _segment_quantity(
                     tariff, period_qty, seg_start, seg_end, days, **qty_ctx,
                 )
                 if seg_qty <= 0:
                     continue
-                amt = rate * seg_qty
+                rate, charge_qty = _charge_rate_and_quantity(tariffs, t, seg_qty, seg_end)
+                amt = rate * charge_qty
                 total_amount += amt
                 seg_qty_total += seg_qty
                 if bill_code in TARIFF_SEGMENT_DETAIL_CODES:

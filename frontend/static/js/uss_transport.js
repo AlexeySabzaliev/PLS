@@ -6,6 +6,23 @@
   const role = 'transport_logistics';
   let vehicleTypes = [];
 
+  const COL_CLASS = {
+    tractor_plate: 'col-plate',
+    trailer_plate: 'col-plate',
+    operation_type_code: 'col-op',
+    waybill_numbers: 'col-waybill',
+    mx_numbers: 'col-mx',
+    vehicle_type_id: 'col-type',
+    seal_number: 'col-seal',
+    torg2_number: 'col-torg2',
+    volume_document_m3: 'col-vol',
+    handling_type_code: 'col-handling',
+    extra_handling_m3: 'col-vol',
+    registered_at: 'col-time',
+    departed_at: 'col-time',
+    extra_document_set_qty: 'col-qty',
+  };
+
   function setStatus(msg, isError) {
     statusEl.textContent = msg;
     statusEl.className = isError ? 'status error' : 'status';
@@ -77,6 +94,12 @@
         const vehicles = (data.vehicles || []).filter((v) => String(v.contract_id) === cid);
 
         block.innerHTML = `<h2>Договор ${c.number}</h2>`;
+        if (schema.vehicle_tariff_hint && (schema.vehicle_inputs || []).length) {
+          const hint = document.createElement('p');
+          hint.className = 'muted tariff-hint';
+          hint.textContent = schema.vehicle_tariff_hint;
+          block.appendChild(hint);
+        }
         const vehSec = document.createElement('div');
         vehSec.className = 'vehicles-section';
         renderVehicles(vehSec, vehicles, c.id, data.warehouse_id, data.operation_date, schema);
@@ -120,24 +143,29 @@
     container.appendChild(head);
 
     const wrap = document.createElement('div');
-    wrap.className = 'table-scroll';
+    wrap.className = 'transport-table-wrap';
     const table = document.createElement('table');
-    table.className = 'data-table transport-table';
+    table.className = 'data-table transport-wide-table';
     const thead = document.createElement('thead');
     const hr = document.createElement('tr');
     fields.forEach((f) => {
       const th = document.createElement('th');
       th.textContent = f.label;
+      th.className = COL_CLASS[f.field] || '';
+      th.title = f.label;
       hr.appendChild(th);
     });
     vInputs.forEach((inp) => {
       const th = document.createElement('th');
       th.textContent = inp.name;
-      th.title = inp.billing_line_code;
+      const unit = inp.unit_code ? ` (${inp.unit_code})` : '';
+      th.title = `${inp.name}${unit}\nКод: ${inp.billing_line_code}`;
+      th.className = 'col-tariff';
       hr.appendChild(th);
     });
     const thAct = document.createElement('th');
     thAct.textContent = '';
+    thAct.className = 'col-actions';
     hr.appendChild(thAct);
     thead.appendChild(hr);
     table.appendChild(thead);
@@ -164,25 +192,30 @@
     const inputs = {};
     const rqInputs = {};
     const rq = vehicle.report_quantities || {};
-    let waybillsBlock = null;
+    let waybillsEditor = null;
 
     fields.forEach((f) => {
       const td = document.createElement('td');
-      if (f.input_type === 'waybills') {
-        waybillsBlock = UssApi.renderWaybillsBlock(
-          vehicle.waybills,
-          vehicle.operation_type_code || 'inbound',
-          true,
+      td.className = COL_CLASS[f.field] || '';
+      if (f.input_type === 'waybill_column' || f.input_type === 'mx_column') {
+        if (!waybillsEditor) {
+          waybillsEditor = UssApi.createWaybillsEditor(
+            vehicle.waybills,
+            vehicle.operation_type_code || 'inbound',
+            true,
+          );
+          inputs.waybills = waybillsEditor;
+        }
+        td.appendChild(
+          f.input_type === 'waybill_column' ? waybillsEditor.waybillCol : waybillsEditor.mxCol,
         );
-        inputs.waybills = waybillsBlock;
-        td.appendChild(waybillsBlock);
       } else {
         const inp = UssApi.renderSchemaField(f, vehicle[f.field], { vehicleTypes });
         inputs[f.field] = inp;
         td.appendChild(inp);
         if (f.field === 'operation_type_code') {
           inp.addEventListener('change', () => {
-            waybillsBlock?.updateMxLabels(inp.value);
+            waybillsEditor?.updateOpType(inp.value);
           });
         }
       }
@@ -190,6 +223,7 @@
     });
     vInputs.forEach((inp) => {
       const td = document.createElement('td');
+      td.className = 'col-tariff';
       const el = document.createElement('input');
       el.type = 'number';
       el.min = '0';
@@ -200,6 +234,7 @@
       tr.appendChild(td);
     });
     const tdBtn = document.createElement('td');
+    tdBtn.className = 'col-actions';
     const save = document.createElement('button');
     save.type = 'button';
     save.textContent = isNew ? 'Создать' : 'Сохранить';
@@ -212,10 +247,13 @@
       };
       if (vehicle.id) payload.id = vehicle.id;
       fields.forEach((f) => {
-        if (f.input_type === 'waybills') {
-          payload.waybills = inputs.waybills?.collect?.() || [];
+        if (f.input_type === 'waybill_column' || f.input_type === 'mx_column') {
+          if (f.input_type === 'waybill_column') {
+            payload.waybills = inputs.waybills?.collect?.() || [];
+          }
           return;
         }
+        if (!inputs[f.field]) return;
         const v = inputs[f.field].value;
         payload[f.field] = v === '' ? null : v;
       });
