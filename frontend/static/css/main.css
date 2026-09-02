@@ -193,3 +193,44 @@ nav a { margin-right: 1rem; }
     grid-template-columns: 1fr;
   }
 }
+
+.login-panel {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  max-width: 360px;
+}
+
+.login-form label {
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+.login-form input {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.5rem;
+  box-sizing: border-box;
+}
+
+.login-form button,
+.link-btn {
+  cursor: pointer;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #1e3a5f;
+  background: #1e3a5f;
+  color: #fff;
+  border-radius: 4px;
+}
+
+.link-btn {
+  margin-left: 0.5rem;
+  font-size: 0.85rem;
+  background: transparent;
+  color: #c8d8ec;
+  border-color: transparent;
+  text-decoration: underline;
+}

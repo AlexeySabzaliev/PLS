@@ -6,6 +6,7 @@ from functools import wraps
 from flask import g, jsonify, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from app.config import Config
 from app.core.sso import normalize_identity, resolve_sso_identity
 from app.db import db
 
@@ -114,6 +115,12 @@ def before_request_auth():
     if path in PUBLIC_PATHS or path.startswith("/static/"):
         g.user = None
         return None
+
+    # Автовход SSO (как transport): заголовок IIS / Windows SSPI
+    if Config.SSO_ENABLED and (Config.SSO_MODE or "").lower() != "oidc":
+        if not session.get("user_id"):
+            attempt_sso_login(request.headers)
+
     if path.startswith("/api/"):
         user = get_current_user()
         if not user and not path.startswith("/api/auth/"):

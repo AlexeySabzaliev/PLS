@@ -6,21 +6,32 @@
   <link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
-  <header>
-    <h1>{{ app_short }}</h1>
-    <p>{{ app_name }}</p>
-  </header>
-  <nav>
-    <a href="/uss/transport">УСС: Транспорт</a>
-    <a href="/uss/warehouse">УСС: Склад</a>
-    <a href="/uss/inventory">УСС: Запасы</a>
-    <a href="/admin/reference">Справочники</a>
-  </nav>
-  <main>
+  <header class="pls-header">
+    <a href="/" class="pls-logo">{{ app_short }}</a>
+    <nav class="pls-nav">
+      <a href="/uss/transport">Транспорт</a>
+      <a href="/uss/warehouse">Склад</a>
+      <a href="/uss/inventory">Запасы</a>
+      <a href="/admin/reference">Справочники</a>
+    </nav>
     {% if user %}
-      <p>Вошли как: {{ user.email }}</p>
+    <span class="pls-user">{{ user.email }} <button type="button" id="logout-btn" class="link-btn">Выйти</button></span>
+    {% endif %}
+  </header>
+  <main class="pls-main">
+    {% if user %}
+      <p>Вошли как: <strong>{{ user.email }}</strong></p>
     {% else %}
-      <p>Используйте SSO или <code>POST /api/auth/login</code></p>
+      <section class="login-panel">
+        <h2>Вход</h2>
+        <p class="muted">В корпсети — автовход по Windows SSO. Локально — email/пароль из <code>flask pls init-db --demo</code>.</p>
+        <form id="login-form" class="login-form">
+          <label>Email <input type="email" name="email" required placeholder="admin@bsh-ru.ru" autocomplete="username"></label>
+          <label>Пароль <input type="password" name="password" required autocomplete="current-password"></label>
+          <button type="submit">Войти</button>
+        </form>
+        <p id="login-error" class="status error"></p>
+      </section>
     {% endif %}
     <section>
       <h2>Модули</h2>

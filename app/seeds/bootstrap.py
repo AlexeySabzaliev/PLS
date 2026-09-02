@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 from app.core.auth import hash_password
@@ -24,8 +24,8 @@ from app.modules.reference.models import (
     UserWarehouseAccess,
     Warehouse,
 )
-from app.modules.uss.models import OperationDailyTotal, VehicleOperation
 from app.seeds.ariston_tariffs import ensure_ariston_tariffs
+from app.seeds.ariston_august import seed_ariston_strelna_august
 
 PRODUCT_TYPES = [
     ("RESPONSIBLE_STORAGE", "Ответственное хранение"),
@@ -120,14 +120,43 @@ def seed_reference(*, verbose: bool = False) -> dict:
     return stats
 
 
+def _ensure_demo_user(
+    *,
+    email: str,
+    full_name: str,
+    password: str,
+    role_code: str,
+    warehouse: Warehouse,
+    roles: dict[str, Role],
+    stats: dict,
+    stat_key: str,
+) -> User:
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        user = User(
+            email=email,
+            full_name=full_name,
+            password_hash=hash_password(password),
+            is_active=True,
+        )
+        db.session.add(user)
+        stats[stat_key] = 1
+    db.session.flush()
+    role = roles.get(role_code)
+    if role and not UserRole.query.filter_by(user_id=user.id, role_id=role.id).first():
+        db.session.add(UserRole(user_id=user.id, role_id=role.id))
+    if not UserWarehouseAccess.query.filter_by(user_id=user.id, warehouse_id=warehouse.id).first():
+        db.session.add(UserWarehouseAccess(user_id=user.id, warehouse_id=warehouse.id))
+    return user
+
+
 def seed_admin(*, verbose: bool = False) -> dict:
-    """Администратор и демо-пользователь транспорта."""
+    """Администратор и демо-пользователи УСС (Стрельна / Аристон)."""
     seed_reference(verbose=False)
-    stats = {"admin": 0, "transport_user": 0}
+    stats = {"admin": 0, "transport_user": 0, "warehouse_user": 0, "inventory_user": 0}
 
     admin_email = os.getenv("PLS_ADMIN_EMAIL", "admin@bsh-ru.ru").strip().lower()
     admin_password = os.getenv("PLS_ADMIN_PASSWORD", "admin")
-    transport_email = os.getenv("PLS_TRANSPORT_EMAIL", "transport@bsh-ru.ru").strip().lower()
 
     admin = User.query.filter_by(email=admin_email).first()
     if not admin:
@@ -146,17 +175,6 @@ def seed_admin(*, verbose: bool = False) -> dict:
         if admin_password and not admin.password_hash:
             admin.password_hash = hash_password(admin_password)
 
-    transport = User.query.filter_by(email=transport_email).first()
-    if not transport:
-        transport = User(
-            email=transport_email,
-            full_name="Транспортная логистика",
-            password_hash=hash_password(os.getenv("PLS_TRANSPORT_PASSWORD", "transport")),
-            is_active=True,
-        )
-        db.session.add(transport)
-        stats["transport_user"] = 1
-
     db.session.flush()
 
     roles = {r.code: r for r in Role.query.all()}
@@ -164,140 +182,57 @@ def seed_admin(*, verbose: bool = False) -> dict:
         if not UserRole.query.filter_by(user_id=admin.id, role_id=roles["admin"].id).first():
             db.session.add(UserRole(user_id=admin.id, role_id=roles["admin"].id))
 
-    wh = Warehouse.query.filter_by(code="sofino").first() or Warehouse.query.first()
-    if transport and roles.get("transport_logistics"):
-        if not UserRole.query.filter_by(
-            user_id=transport.id, role_id=roles["transport_logistics"].id
-        ).first():
-            db.session.add(UserRole(user_id=transport.id, role_id=roles["transport_logistics"].id))
-        if wh and not UserWarehouseAccess.query.filter_by(
-            user_id=transport.id, warehouse_id=wh.id
-        ).first():
-            db.session.add(UserWarehouseAccess(user_id=transport.id, warehouse_id=wh.id))
+    wh = Warehouse.query.filter_by(code="strelna").first() or Warehouse.query.first()
+    if not wh:
+        db.session.commit()
+        if verbose:
+            print("seed-admin: нет склада strelna")
+        return stats
+
+    _ensure_demo_user(
+        email=os.getenv("PLS_TRANSPORT_EMAIL", "transport@bsh-ru.ru").strip().lower(),
+        full_name="Транспортная логистика",
+        password=os.getenv("PLS_TRANSPORT_PASSWORD", "transport"),
+        role_code="transport_logistics",
+        warehouse=wh,
+        roles=roles,
+        stats=stats,
+        stat_key="transport_user",
+    )
+    _ensure_demo_user(
+        email=os.getenv("PLS_WAREHOUSE_EMAIL", "warehouse@bsh-ru.ru").strip().lower(),
+        full_name="Складская логистика",
+        password=os.getenv("PLS_WAREHOUSE_PASSWORD", "warehouse"),
+        role_code="warehouse_logistics",
+        warehouse=wh,
+        roles=roles,
+        stats=stats,
+        stat_key="warehouse_user",
+    )
+    _ensure_demo_user(
+        email=os.getenv("PLS_INVENTORY_EMAIL", "inventory@bsh-ru.ru").strip().lower(),
+        full_name="Управление запасами",
+        password=os.getenv("PLS_INVENTORY_PASSWORD", "inventory"),
+        role_code="inventory_management",
+        warehouse=wh,
+        roles=roles,
+        stats=stats,
+        stat_key="inventory_user",
+    )
 
     db.session.commit()
     if verbose:
-        print(f"seed-admin: {stats} (admin={admin_email})")
+        print(
+            f"seed-admin: {stats} (admin={admin_email}, склад={wh.code}, "
+            "transport/warehouse/inventory@bsh-ru.ru)"
+        )
     return stats
 
 
 def seed_demo(*, verbose: bool = False) -> dict:
-    """Демо: клиент Аристон, договор, линии процессов, ТС и суточный итог."""
+    """Демо: Аристон / Стрельна / август 2026 (из эталонного Excel Billings)."""
     seed_admin(verbose=False)
-    stats = {
-        "client": 0,
-        "contract": 0,
-        "amendment": 0,
-        "tariff": 0,
-        "process_lines": 0,
-        "vehicle": 0,
-        "daily_total": 0,
-    }
-
-    wh = Warehouse.query.filter_by(code="sofino").first()
-    pt = ProductType.query.filter_by(code="RESPONSIBLE_STORAGE").first()
-    unit_pcs = UnitOfMeasure.query.filter_by(code="pcs").first()
-    unit_hour = UnitOfMeasure.query.filter_by(code="hour").first()
-    if not wh or not pt:
-        if verbose:
-            print("seed-demo: пропуск — нет склада или типа продукта")
-        return stats
-
-    client = Client.query.filter_by(name="Аристон").first()
-    if not client:
-        client = Client(name="Аристон", is_active=True)
-        db.session.add(client)
-        db.session.flush()
-        stats["client"] = 1
-
-    contract = Contract.query.filter_by(number="ДЕМО-АРИСТОН-1").first()
-    if not contract:
-        contract = Contract(
-            client_id=client.id,
-            warehouse_id=wh.id,
-            product_type_id=pt.id,
-            number="ДЕМО-АРИСТОН-1",
-            status="active",
-        )
-        db.session.add(contract)
-        db.session.flush()
-        stats["contract"] = 1
-
-    am = ContractAmendment.query.filter_by(contract_id=contract.id, number="ДС-1").first()
-    if not am:
-        am = ContractAmendment(
-            contract_id=contract.id,
-            number="ДС-1",
-            status="active",
-            effective_from=date(2026, 1, 1),
-        )
-        db.session.add(am)
-        db.session.flush()
-        stats["amendment"] = 1
-
-    added_tariffs = ensure_ariston_tariffs(contract.id, am.id, valid_from=date(2026, 1, 1))
-    stats["tariff"] += added_tariffs
-
-    for line_code, base_process, line_name in (
-        ("ariston_standard", "warehouse_logistics", "Аристон стандарт"),
-        ("gazprom_logistics", "transport_logistics", "Газпром логистика"),
-    ):
-        line = ProcessLine.query.filter_by(code=line_code).first()
-        if not line:
-            line = ProcessLine(
-                code=line_code,
-                name=line_name,
-                base_process=base_process,
-                client_id=client.id if line_code == "ariston_standard" else None,
-                is_active=True,
-            )
-            db.session.add(line)
-            db.session.flush()
-            stats["process_lines"] += 1
-        cfg = line.config
-        if not cfg and line_code in EXAMPLE_LINE_CONFIGS:
-            db.session.add(
-                ProcessLineConfig(
-                    process_line_id=line.id,
-                    config_json=EXAMPLE_LINE_CONFIGS[line_code],
-                )
-            )
-
-    demo_date = date(2026, 8, 15)
-    if not VehicleOperation.query.filter_by(
-        contract_id=contract.id, operation_date=demo_date, plate_number="А123ВС78"
-    ).first():
-        db.session.add(
-            VehicleOperation(
-                contract_id=contract.id,
-                warehouse_id=wh.id,
-                operation_date=demo_date,
-                plate_number="А123ВС78",
-                volume_document_m3=Decimal("32.5"),
-                handling_type_code="manual",
-                registered_at=datetime(2026, 8, 15, 9, 0),
-                departed_at=datetime(2026, 8, 15, 11, 30),
-            )
-        )
-        stats["vehicle"] = 1
-
-    if not OperationDailyTotal.query.filter_by(
-        contract_id=contract.id,
-        report_date=demo_date,
-        billing_line_code="valve_gluing",
-    ).first():
-        db.session.add(
-            OperationDailyTotal(
-                contract_id=contract.id,
-                warehouse_id=wh.id,
-                report_date=demo_date,
-                billing_line_code="valve_gluing",
-                quantity=Decimal("120"),
-            )
-        )
-        stats["daily_total"] = 1
-
-    db.session.commit()
+    stats = seed_ariston_strelna_august(verbose=verbose)
     if verbose:
         print(f"seed-demo: {stats}")
     return stats

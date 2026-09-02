@@ -61,6 +61,7 @@ def list_transport_shift(user: dict, warehouse_id: int, day: date) -> dict:
                 "extra_document_set_qty": v.extra_document_set_qty,
                 "registered_at": v.registered_at.isoformat() if v.registered_at else None,
                 "departed_at": v.departed_at.isoformat() if v.departed_at else None,
+                "report_quantities": dict(v.report_quantities or {}),
             }
             for v in vehicles
         ],
@@ -92,6 +93,12 @@ def save_vehicle_row(user: dict, payload: dict) -> dict:
     row.extra_document_set_qty = payload.get("extra_document_set_qty")
     row.registered_at = _parse_dt(payload.get("registered_at"))
     row.departed_at = _parse_dt(payload.get("departed_at"))
+    rq = payload.get("report_quantities")
+    if isinstance(rq, dict):
+        row.report_quantities = {
+            str(k): float(v) if v not in (None, "") else 0
+            for k, v in rq.items()
+        }
     db.session.commit()
     return {"id": row.id, "saved": True}
 

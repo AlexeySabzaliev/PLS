@@ -7,7 +7,9 @@ from flask_migrate import upgrade
 
 from app import create_app
 from app.db import db
-from app.modules.reference.models import Client, Role, User
+from app.modules.reference.models import Client, Contract, Role, User
+from app.modules.uss.models import VehicleOperation
+from app.seeds.ariston_august import resolve_august_excel_path
 from app.seeds.bootstrap import seed_demo, seed_reference
 
 
@@ -40,8 +42,15 @@ def test_migration_and_seed_reference(migrated_app):
         assert Role.query.filter_by(code="admin").count() == 1
 
 
+@pytest.mark.skipif(
+    resolve_august_excel_path() is None,
+    reason="Нет Ariston billing 08.2026.xlsx (Billings fixtures)",
+)
 def test_seed_demo_creates_contract(migrated_app):
     with migrated_app.app_context():
-        seed_demo()
+        stats = seed_demo()
         assert Client.query.filter_by(name="Аристон").first() is not None
         assert User.query.filter_by(email="admin@bsh-ru.ru").first() is not None
+        assert Contract.query.filter_by(number="STR-OH-ARISTON").first() is not None
+        assert stats["vehicles"] >= 50
+        assert VehicleOperation.query.count() >= stats["vehicles"]

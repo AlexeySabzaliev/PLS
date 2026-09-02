@@ -7,6 +7,7 @@ from flask.cli import with_appcontext
 
 from app.db import db
 from app.seeds import seed_admin, seed_demo, seed_reference
+from app.seeds.ariston_august import seed_ariston_strelna_august
 
 
 def register_cli(app: Flask) -> None:
@@ -43,8 +44,15 @@ def register_cli(app: Flask) -> None:
     @pls_group.command("seed-demo")
     @with_appcontext
     def cmd_seed_demo():
-        """Демо: Аристон, договор, ТС, daily total."""
+        """Демо: Аристон / Стрельна / август 2026."""
         seed_demo(verbose=True)
+
+    @pls_group.command("seed-ariston-august")
+    @with_appcontext
+    def cmd_seed_ariston_august():
+        """Импорт августа Аристон (Стрельна) из Excel Billings."""
+        seed_admin(verbose=False)
+        seed_ariston_strelna_august(verbose=True)
 
     @pls_group.command("db-check")
     @with_appcontext

@@ -31,3 +31,21 @@ def test_login_and_me(client, auth_client):
     resp = client.get("/api/auth/me")
     assert resp.status_code == 200
     assert resp.json["email"] == "admin@test.local"
+
+
+def test_sso_auto_login_headers(app, client, monkeypatch):
+    import app.core.auth as auth_mod
+    import app.core.sso as sso_mod
+
+    monkeypatch.setattr(sso_mod.Config, "SSO_ENABLED", True)
+    monkeypatch.setattr(sso_mod.Config, "SSO_MODE", "headers")
+    monkeypatch.setattr(auth_mod.Config, "SSO_ENABLED", True)
+    monkeypatch.setattr(auth_mod.Config, "SSO_MODE", "headers")
+    monkeypatch.setattr(sso_mod.Config, "SSO_DEV_IDENTITY", "")
+
+    resp = client.get(
+        "/api/auth/me",
+        headers={"Remote-User": "transport@test.local"},
+    )
+    assert resp.status_code == 200
+    assert resp.json["email"] == "transport@test.local"
