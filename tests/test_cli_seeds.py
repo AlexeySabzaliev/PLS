@@ -1,34 +1,10 @@
 """Тесты CLI и миграций."""
-import os
-import tempfile
-
 import pytest
-from flask_migrate import upgrade
 
-from app import create_app
-from app.db import db
 from app.modules.reference.models import Client, Contract, Role, User
 from app.modules.uss.models import VehicleOperation
 from app.seeds.ariston_august import resolve_august_excel_path
 from app.seeds.bootstrap import seed_demo, seed_reference
-
-
-@pytest.fixture
-def migrated_app():
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    uri = "sqlite:///" + path.replace("\\", "/")
-    os.environ["DATABASE_URL"] = uri
-    application = create_app("development")
-    application.config["SQLALCHEMY_DATABASE_URI"] = uri
-    with application.app_context():
-        upgrade()
-        yield application
-    os.environ.pop("DATABASE_URL", None)
-    try:
-        os.remove(path)
-    except OSError:
-        pass
 
 
 def test_migration_and_seed_reference(migrated_app):

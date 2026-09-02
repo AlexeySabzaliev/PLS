@@ -17,7 +17,7 @@ from app.modules.reference.models import (
     Warehouse,
 )
 from app.modules.uss.models import OperationDailyTotal, ShiftReport, VehicleOperation
-from app.seeds.ariston_tariffs import ensure_ariston_tariffs
+from app.seeds.ariston_tariffs import ensure_ariston_billing_rates, ensure_ariston_tariffs
 from app.seeds.billing_excel_ref import read_billing_reference, read_prr_rows
 
 CONTRACT_NUMBER = "STR-OH-ARISTON"
@@ -124,6 +124,35 @@ def _clear_august_ops(contract_id: int, warehouse_id: int) -> None:
   ).delete(synchronize_session=False)
 
 
+def _apply_vehicle_billing_extras(
+  contract_id: int,
+  warehouse_id: int,
+  billing_lines: dict,
+) -> None:
+  """Распределить доп. комплекты и ELCO по ТС (для сверки с Excel)."""
+  extra_total = int(billing_lines.get("extra_vehicle_docs", {}).get("qty", 0))
+  elco_total = int(billing_lines.get("elco_passports", {}).get("qty", 0))
+  if extra_total <= 0 and elco_total <= 0:
+    return
+  vehicles = (
+    VehicleOperation.query.filter_by(contract_id=contract_id, warehouse_id=warehouse_id)
+    .order_by(VehicleOperation.operation_date, VehicleOperation.id)
+    .all()
+  )
+  if not vehicles:
+    return
+  if extra_total > 0:
+    base, rem = divmod(extra_total, len(vehicles))
+    for i, v in enumerate(vehicles):
+      v.extra_document_set_qty = base + (1 if i < rem else 0)
+  for i, v in enumerate(vehicles):
+    if i >= elco_total:
+      break
+    rq = dict(v.report_quantities or {})
+    rq["elco_passports"] = 1
+    v.report_quantities = rq
+
+
 def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | None = None) -> dict:
   """
   Аристон, склад Стрельна, август 2026 — как в Billings (ПРР + суточные + УЗ).
@@ -180,6 +209,13 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
     db.session.flush()
 
   ensure_ariston_tariffs(contract.id, am.id, valid_from=date(2025, 6, 1))
+  ensure_ariston_billing_rates(contract.id)
+
+  contract.billing_config = {
+    "area_mode": "two_tier",
+    "fixed_m2days": 9435,
+    "fixed_storage_m2days": 9435,
+  }
 
   line = ProcessLine.query.filter_by(code="ariston_standard").first()
   if not line:
@@ -279,11 +315,13 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
       ShiftReport(
         warehouse_id=wh.id,
         report_date=day,
-        area_entries={"storage_area_extra": area_extra} if i == 0 and area_extra else {},
+        area_entries={"storage_area_extra": area_extra} if area_extra else {},
         extra_entries={"repack_units": repack_qty},
       )
     )
     stats["shift_days"] += 1
+
+  _apply_vehicle_billing_extras(contract.id, wh.id, billing_lines)
 
   db.session.commit()
   if verbose:

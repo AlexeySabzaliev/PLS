@@ -43,6 +43,7 @@ class Contract(db.Model, TimestampMixin):
     product_type_id = db.Column(db.Integer, db.ForeignKey("product_types.id"), nullable=False)
     number = db.Column(db.String(64), nullable=False)
     status = db.Column(db.String(32), default="active", nullable=False)
+    billing_config = db.Column(db.JSON, default=dict)
     client = db.relationship("Client")
     warehouse = db.relationship("Warehouse")
     product_type = db.relationship("ProductType")
@@ -84,6 +85,8 @@ class TariffRule(db.Model, TimestampMixin):
     sort_order = db.Column(db.Integer, default=0)
     valid_from = db.Column(db.Date, nullable=False)
     valid_to = db.Column(db.Date)
+    rate_ex_vat = db.Column(db.Numeric(14, 4))
+    formula = db.Column(db.String(64))
     unit = db.relationship("UnitOfMeasure")
 
 
