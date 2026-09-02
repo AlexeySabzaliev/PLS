@@ -6,11 +6,12 @@ from datetime import date
 from app.db import db
 from app.modules.reference.models import ContractAmendment, TariffRule, UnitOfMeasure
 from app.modules.uss.services.tariff_quantity import (
+    apply_tariff_defaults,
+    effective_quantity_source,
     is_inventory_area_tariff,
     needs_manual_daily_input,
     needs_manual_inventory_input,
     needs_manual_vehicle_input,
-    apply_tariff_defaults,
 )
 from app.modules.uss.services.tariff_report import REPORT_ROLES, tariff_in_role_report
 
@@ -66,6 +67,7 @@ def _active_tariffs(contract_id: int, on_date: date) -> list[dict]:
                 "report_role": r.report_role,
                 "report_scope": r.report_scope,
                 "quantity_source": r.quantity_source,
+                "accounting_mode": getattr(r, "accounting_mode", None),
                 "is_custom": r.is_custom,
                 "price_agreed": r.price_agreed,
                 "sort_order": r.sort_order or 0,
@@ -81,7 +83,7 @@ def _tariff_row(t: dict, *, input_kind: str) -> dict:
         "billing_line_code": t["billing_line_code"],
         "name": t["name"],
         "unit_code": t.get("unit_code"),
-        "quantity_source": t.get("quantity_source"),
+        "quantity_source": effective_quantity_source(t),
         "report_role": t.get("report_role"),
         "report_scope": t.get("report_scope"),
         "input_kind": input_kind,
@@ -135,3 +137,27 @@ def schema_for_contract_role(contract_id: int, on_date: date, role: str) -> dict
     if role == "transport_logistics":
         schema["vehicle_fixed_fields"] = list(TRANSPORT_FIXED_FIELDS)
     return schema
+
+
+def schema_for_contracts_role(
+    contract_ids: list[int],
+    on_date: date,
+    role: str,
+) -> dict[int, dict]:
+    return {cid: schema_for_contract_role(cid, on_date, role) for cid in contract_ids}
+
+
+def tariffs_by_role_from_schema(
+    contract_ids: list[int],
+    on_date: date,
+    role: str,
+) -> dict[int, dict]:
+    """contract_id → {vehicle: [...], period: [...]}"""
+    result: dict[int, dict] = {}
+    for cid in contract_ids:
+        sch = schema_for_contract_role(cid, on_date, role)
+        result[cid] = {
+            "vehicle": sch["vehicle_inputs"],
+            "period": sch["period_inputs"],
+        }
+    return result
