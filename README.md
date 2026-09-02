@@ -4,20 +4,42 @@
 
 ## Быстрый старт
 
-```bash
+### PostgreSQL (рекомендуется)
+
+```powershell
 cd D:\PLS
+docker compose up -d postgres
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env
-# Настройте DATABASE_URL (PostgreSQL) или оставьте SQLite по умолчанию
 
 set FLASK_APP=run.py
-flask db upgrade   # после инициализации миграций
+flask pls init-db --demo
 python run.py
 ```
 
-Откройте http://localhost:5000
+### SQLite (без Docker)
+
+```powershell
+# В .env закомментируйте DATABASE_URL или укажите:
+# DATABASE_URL=sqlite:///instance/pls.db
+flask pls init-db --demo
+python run.py
+```
+
+Откройте http://localhost:5000  
+Логин: `admin@bsh-ru.ru` / `admin` (см. `.env` → `PLS_ADMIN_*`)
+
+### CLI
+
+| Команда | Описание |
+|---------|----------|
+| `flask pls init-db` | миграции + справочники + admin |
+| `flask pls init-db --demo` | + демо Аристон, ТС, daily total |
+| `flask pls seed-reference` | только справочники и роли |
+| `flask pls seed-demo` | демо-данные |
+| `flask pls db-check` | проверка подключения к БД |
 
 ## SSO (Windows)
 

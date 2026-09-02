@@ -12,7 +12,7 @@
 | Фаза | Описание | Готовность | Следующий шаг |
 |------|----------|------------|---------------|
 | 0 | Auth/SSO, роли, оболочка портала | ~70% | Полный portal shell, проверка SSO на IIS |
-| 1 | Схема БД, модели | ~50% | Реальная Alembic-миграция `001_initial`, seed |
+| 1 | Схема БД, модели | ~75% | PostgreSQL в dev, seed prod |
 | 2 | Операции УСС (транспорт/склад/инвентаризация) | ~55% | UI редактирования, period_lock, waybills |
 | 3 | report_schema, справочники, конфигураторы, UI из схемы | ~35% | Порт `report_schema` из Billings, schema-driven UI |
 | 4 | Биллинг, сверка Ariston Excel | ~5% | Порт calculator + fixtures и тесты |
@@ -30,9 +30,9 @@
 
 ## Фаза 1 — DB schema, models
 
-**Сделано:** SQLAlchemy-модели (clients, contracts, amendments, tariffs, users/roles, USS); `process_lines` + `process_line_config`; тесты через `db.create_all()`.
+**Сделано:** SQLAlchemy-модели; **миграция `001_initial`** (все таблицы, индексы, unique); `flask pls init-db`, `seed-reference`, `seed-admin`, `seed-demo`; `docker-compose.yml` (PostgreSQL 16).
 
-**Осталось:** содержательная миграция Alembic (сейчас `001_initial.py` — заглушка); PostgreSQL deploy; seed для prod; при импорте данных — паритет с миграциями Billings.
+**Осталось:** seed для prod-окружения; при импорте данных — паритет с миграциями Billings.
 
 ---
 
@@ -70,8 +70,8 @@
 
 ## Приоритеты (кратко)
 
-1. **P0:** GitHub, этот файл, initial push.
-2. **P1:** Alembic `001_initial`, CLI seed, PostgreSQL в dev.
+1. **P0:** GitHub push (`gh auth login`).
+2. **P1:** ~~Alembic, seed, PostgreSQL~~ — сделано; проверить prod deploy.
 3. **P2:** Schema-driven UI УСС; порт report_schema / tariff_* из Billings.
 4. **P3:** Billing + Ariston tests.
 5. **P4:** УЗнТ и prod cutover.

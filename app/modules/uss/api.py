@@ -8,6 +8,7 @@ from flask import Blueprint, g, request
 from app.core.auth import login_required
 from app.core.permissions import user_has_uss_section
 from app.modules.uss.services.inventory_shift import get_inventory_shift, save_inventory_shift
+from app.modules.uss.services.report_schema import schema_for_contract_role
 from app.modules.uss.services.shift_day_confirm import confirm_day, day_summary
 from app.modules.uss.services.transport_shift import list_transport_shift, save_transport_daily, save_vehicle_row
 from app.modules.uss.services.warehouse_shift import list_warehouse_shift, save_warehouse_shift
@@ -117,3 +118,63 @@ def post_day_confirm():
     if result.get("error"):
         return result, 400
     return result
+
+
+@bp.get("/report-schema")
+@login_required
+def get_report_schema():
+    """Схема полей по договору и роли (из tariff_rules)."""
+    contract_id = request.args.get("contract_id", type=int)
+    role = request.args.get("role", "transport_logistics")
+    on_date = date.fromisoformat(request.args.get("date", date.today().isoformat()))
+    if not contract_id:
+        return {"error": "contract_id_required"}, 400
+    if role == "transport_logistics" and not user_has_uss_section(g.user, "uss_ops_transport"):
+        return {"error": "forbidden"}, 403
+    if role == "warehouse_logistics" and not user_has_uss_section(g.user, "uss_ops_warehouse"):
+        return {"error": "forbidden"}, 403
+    if role == "inventory_management" and not user_has_uss_section(g.user, "uss_ops_inventory"):
+        return {"error": "forbidden"}, 403
+    return schema_for_contract_role(contract_id, on_date, role)
+
+
+@bp.get("/context")
+@login_required
+def shift_context():
+    """Склады и договоры для UI смен."""
+    from app.modules.reference.models import Contract, ProductType, Warehouse
+
+    role = request.args.get("role", "transport_logistics")
+    wh_id = request.args.get("warehouse_id", type=int)
+    day = date.fromisoformat(request.args.get("date", date.today().isoformat()))
+
+    if g.user.get("is_admin"):
+        warehouses = Warehouse.query.filter_by(is_active=True).order_by(Warehouse.code).all()
+    else:
+        wh_ids = g.user.get("warehouse_ids") or []
+        warehouses = Warehouse.query.filter(Warehouse.id.in_(wh_ids), Warehouse.is_active.is_(True)).all()
+
+    if not warehouses:
+        return {"error": "no_warehouses"}, 403
+
+    if wh_id is None:
+        wh_id = warehouses[0].id
+    elif not g.user.get("is_admin") and wh_id not in (g.user.get("warehouse_ids") or []):
+        return {"error": "forbidden"}, 403
+
+    contracts = (
+        Contract.query.join(ProductType)
+        .filter(
+            Contract.warehouse_id == wh_id,
+            Contract.status == "active",
+            ProductType.code == "RESPONSIBLE_STORAGE",
+        )
+        .all()
+    )
+    return {
+        "role": role,
+        "date": day.isoformat(),
+        "warehouse_id": wh_id,
+        "warehouses": [{"id": w.id, "code": w.code, "name": w.name} for w in warehouses],
+        "contracts": [{"id": c.id, "number": c.number} for c in contracts],
+    }

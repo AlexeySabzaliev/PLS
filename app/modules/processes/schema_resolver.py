@@ -39,52 +39,15 @@ def _deep_merge_dict(base: dict, override: dict) -> dict:
 
 
 def _tariff_fields_for_contract(contract_id: int, on_date: date, role: str) -> dict:
-    """Динамические поля из ставок ДС (упрощённая версия report_schema)."""
-    from app.modules.reference.models import ContractAmendment, TariffRule
+    """Динамические поля из ставок ДС."""
+    from app.modules.uss.services.report_schema import schema_for_contract_role
 
-    amendments = ContractAmendment.query.filter(
-        ContractAmendment.contract_id == contract_id,
-        ContractAmendment.status == "active",
-        ContractAmendment.effective_from <= on_date,
-        db.or_(ContractAmendment.effective_to.is_(None), ContractAmendment.effective_to >= on_date),
-    ).all()
-    am_ids = [a.id for a in amendments]
-    if not am_ids:
-        return {"period_inputs": [], "inventory_areas": [], "inventory_extra": [], "vehicle_inputs": []}
-
-    tariffs = TariffRule.query.filter(
-        TariffRule.contract_id == contract_id,
-        TariffRule.amendment_id.in_(am_ids),
-        TariffRule.valid_from <= on_date,
-        db.or_(TariffRule.valid_to.is_(None), TariffRule.valid_to >= on_date),
-        TariffRule.report_role == role,
-    ).order_by(TariffRule.sort_order, TariffRule.id).all()
-
-    period_inputs, inventory_areas, inventory_extra, vehicle_inputs = [], [], [], []
-    for t in tariffs:
-        row = {
-            "tariff_id": t.id,
-            "billing_line_code": t.billing_line_code,
-            "name": t.name,
-            "quantity_source": t.quantity_source,
-            "report_role": t.report_role,
-            "is_custom": t.is_custom,
-        }
-        src = (t.quantity_source or "").lower()
-        if src == "manual_daily":
-            period_inputs.append({**row, "input_kind": "period"})
-        elif src == "manual_inventory":
-            if "area" in (t.billing_line_code or "").lower():
-                inventory_areas.append({**row, "input_kind": "inventory_area"})
-            else:
-                inventory_extra.append({**row, "input_kind": "inventory_extra"})
-        elif src in ("manual_vehicle", "auto_vehicle"):
-            vehicle_inputs.append({**row, "input_kind": "vehicle"})
+    sch = schema_for_contract_role(contract_id, on_date, role)
     return {
-        "period_inputs": period_inputs,
-        "inventory_areas": inventory_areas,
-        "inventory_extra": inventory_extra,
-        "vehicle_inputs": vehicle_inputs,
+        "period_inputs": sch.get("period_inputs", []),
+        "inventory_areas": sch.get("inventory_areas", []),
+        "inventory_extra": sch.get("inventory_extra", []),
+        "vehicle_inputs": sch.get("vehicle_inputs", []),
     }
 
 

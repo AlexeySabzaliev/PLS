@@ -5,6 +5,9 @@ from datetime import date
 
 from app.modules.reference.models import Contract, ProductType
 from app.modules.uss.services.operation_daily_totals import list_daily_totals, upsert_daily_totals
+from app.modules.uss.services.report_schema import schema_for_contract_role
+
+REPORT_ROLE = "warehouse_logistics"
 
 
 def list_warehouse_shift(user: dict, warehouse_id: int, day: date) -> dict:
@@ -23,11 +26,16 @@ def list_warehouse_shift(user: dict, warehouse_id: int, day: date) -> dict:
     totals_by_contract = {
         c.id: list_daily_totals(c.id, warehouse_id, day) for c in contracts
     }
+    schemas = {
+        str(c.id): schema_for_contract_role(c.id, day, REPORT_ROLE) for c in contracts
+    }
     return {
         "warehouse_id": warehouse_id,
         "report_date": day.isoformat(),
+        "report_role": REPORT_ROLE,
         "contracts": [{"id": c.id, "number": c.number} for c in contracts],
-        "daily_totals": totals_by_contract,
+        "schemas": schemas,
+        "daily_totals": {str(k): v for k, v in totals_by_contract.items()},
     }
 
 

@@ -53,4 +53,8 @@ def create_app(config_name: str | None = None) -> Flask:
     def _auth():
         return before_request_auth()
 
+    from app.cli import register_cli
+
+    register_cli(app)
+
     return app

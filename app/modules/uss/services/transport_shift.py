@@ -7,6 +7,9 @@ from app.db import db
 from app.modules.reference.models import Contract, ProductType
 from app.modules.uss.models import VehicleOperation
 from app.modules.uss.services.operation_daily_totals import list_daily_totals, upsert_daily_totals
+from app.modules.uss.services.report_schema import schema_for_contract_role
+
+REPORT_ROLE = "transport_logistics"
 
 
 def _parse_dt(value) -> datetime | None:
@@ -34,10 +37,19 @@ def list_transport_shift(user: dict, warehouse_id: int, day: date) -> dict:
         warehouse_id=warehouse_id,
         operation_date=day,
     ).order_by(VehicleOperation.id).all()
+    schemas = {
+        str(c.id): schema_for_contract_role(c.id, day, REPORT_ROLE) for c in contracts
+    }
+    daily_totals = {
+        str(c.id): list_daily_totals(c.id, warehouse_id, day) for c in contracts
+    }
     return {
         "warehouse_id": warehouse_id,
         "operation_date": day.isoformat(),
+        "report_role": REPORT_ROLE,
         "contracts": [{"id": c.id, "number": c.number, "client_id": c.client_id} for c in contracts],
+        "schemas": schemas,
+        "daily_totals": daily_totals,
         "vehicles": [
             {
                 "id": v.id,
