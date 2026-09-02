@@ -39,3 +39,8 @@ def uss_inventory():
 @bp.get("/admin/reference")
 def admin_reference():
     return render_template("admin/reference.html", user=get_current_user())
+
+
+@bp.get("/admin/sso")
+def admin_sso():
+    return render_template("admin/sso.html", user=get_current_user())

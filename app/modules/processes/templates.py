@@ -51,14 +51,31 @@ BASE_PROCESS_TEMPLATES: dict[str, dict] = {
 EXAMPLE_LINE_CONFIGS: dict[str, dict] = {
     "ariston_standard": {
         "enabled_sections": ["period_inputs", "day_confirm"],
-        "extra_billing_line_codes": ["valve_gluing"],
+        "extra_billing_line_codes": [
+            "valve_gluing",
+            "vietnam_stickering",
+            "flue_stickering",
+            "repack_units",
+        ],
         "form_fields": [
             {
                 "billing_line_code": "valve_gluing",
                 "label": "Подклейка клапанов",
                 "input_kind": "period",
                 "quantity_source": "manual_daily",
-            }
+            },
+            {
+                "billing_line_code": "vietnam_stickering",
+                "label": "Стикерование Вьетнам",
+                "input_kind": "period",
+                "quantity_source": "manual_daily",
+            },
+            {
+                "billing_line_code": "flue_stickering",
+                "label": "Стикерование дымоходов",
+                "input_kind": "period",
+                "quantity_source": "manual_daily",
+            },
         ],
         "ui_labels": {"title": "Склад Аристон"},
     },

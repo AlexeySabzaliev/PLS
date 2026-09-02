@@ -33,6 +33,7 @@ def create_app(config_name: str | None = None) -> Flask:
     from app.modules.reference import models  # noqa: F401
     from app.modules.uss import models as uss_models  # noqa: F401
 
+    from app.api.admin import bp as admin_bp
     from app.api.auth import bp as auth_bp
     from app.api.health import bp as health_bp
     from app.modules.billing.api import bp as billing_bp
@@ -43,6 +44,7 @@ def create_app(config_name: str | None = None) -> Flask:
 
     app.register_blueprint(health_bp, url_prefix="/api")
     app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)
     app.register_blueprint(ref_bp)
     app.register_blueprint(process_bp)
     app.register_blueprint(uss_bp)

@@ -14,6 +14,12 @@ STANDARD_BILLING_CODES = frozenset({
     "overtime_m3",
     "inventory_hours",
     "elco_drain_hours",
+    "valve_gluing",
+    "vietnam_stickering",
+    "flue_stickering",
+    "elco_passports",
+    "extra_vehicle_docs_rf",
+    "extra_vehicle_docs_rb",
 })
 
 BILLING_MERGE_INTO = {

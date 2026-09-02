@@ -5,6 +5,7 @@ from flask import Blueprint, request, session
 
 from app.config import Config
 from app.core.auth import attempt_sso_login, get_current_user, login_user_password, logout_user
+from app.core.sso import normalize_identity, resolve_sso_identity
 from app.core.sso import sso_config_public
 
 bp = Blueprint("auth_api", __name__, url_prefix="/api/auth")
@@ -20,9 +21,22 @@ def sso_attempt():
     if not Config.SSO_ENABLED:
         return {"error": "sso_disabled"}, 404
     user = attempt_sso_login(request.headers)
-    if not user:
-        return {"error": "sso_no_access"}, 403
-    return {"user": user}
+    if user:
+        return {"user": user}
+    raw = resolve_sso_identity(request.headers)
+    if not raw:
+        return {"error": "sso_no_identity"}, 403
+    email, _ = normalize_identity(raw)
+    from app.modules.reference.models import SsoAccessRequest
+
+    req = SsoAccessRequest.query.filter_by(email=email.lower()).first()
+    return {
+        "error": "sso_no_access",
+        "message": "Учётная запись не найдена. Заявка отправлена администратору.",
+        "email": email,
+        "pending_request": True,
+        "login_attempts": req.login_attempts if req else 1,
+    }, 403
 
 
 @bp.post("/login")

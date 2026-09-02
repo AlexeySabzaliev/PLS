@@ -25,6 +25,7 @@ from app.modules.reference.models import (
     Warehouse,
 )
 from app.modules.uss.models import OperationDailyTotal, VehicleOperation
+from app.seeds.ariston_tariffs import ensure_ariston_tariffs
 
 PRODUCT_TYPES = [
     ("RESPONSIBLE_STORAGE", "Ответственное хранение"),
@@ -234,39 +235,8 @@ def seed_demo(*, verbose: bool = False) -> dict:
         db.session.flush()
         stats["amendment"] = 1
 
-    if unit_pcs and not TariffRule.query.filter_by(
-        contract_id=contract.id, billing_line_code="valve_gluing"
-    ).first():
-        db.session.add(
-            TariffRule(
-                contract_id=contract.id,
-                amendment_id=am.id,
-                billing_line_code="valve_gluing",
-                name="Подклейка клапанов",
-                unit_id=unit_pcs.id,
-                report_role="warehouse_logistics",
-                quantity_source="manual_daily",
-                valid_from=date(2026, 1, 1),
-            )
-        )
-        stats["tariff"] += 1
-
-    if unit_hour and not TariffRule.query.filter_by(
-        contract_id=contract.id, billing_line_code="elco_drain_hours"
-    ).first():
-        db.session.add(
-            TariffRule(
-                contract_id=contract.id,
-                amendment_id=am.id,
-                billing_line_code="elco_drain_hours",
-                name="Слив ELCO",
-                unit_id=unit_hour.id,
-                report_role="warehouse_logistics",
-                quantity_source="manual_daily",
-                valid_from=date(2026, 1, 1),
-            )
-        )
-        stats["tariff"] += 1
+    added_tariffs = ensure_ariston_tariffs(contract.id, am.id, valid_from=date(2026, 1, 1))
+    stats["tariff"] += added_tariffs
 
     for line_code, base_process, line_name in (
         ("ariston_standard", "warehouse_logistics", "Аристон стандарт"),
@@ -358,7 +328,12 @@ def seed_test_fixtures() -> None:
         effective_from=date(2025, 1, 1),
     )
     unit = UnitOfMeasure(code="pcs", name="шт")
-    db.session.add_all([am, unit])
+    units_extra = [
+        UnitOfMeasure(code="vehicle", name="машина"),
+        UnitOfMeasure(code="hour", name="час"),
+        UnitOfMeasure(code="m2day", name="м²·день"),
+    ]
+    db.session.add_all([am, unit, *units_extra])
     db.session.flush()
 
     db.session.add(
@@ -370,24 +345,12 @@ def seed_test_fixtures() -> None:
             unit_id=unit.id,
             report_role="warehouse_logistics",
             quantity_source="manual_daily",
+            rate_line_code="repack_units",
+            quantity_divisor=1,
             valid_from=date(2025, 1, 1),
         )
     )
-    unit_m2 = UnitOfMeasure(code="m2day", name="м²·день")
-    db.session.add(unit_m2)
-    db.session.flush()
-    db.session.add(
-        TariffRule(
-            contract_id=contract.id,
-            amendment_id=am.id,
-            billing_line_code="storage_area_extra",
-            name="Доп. площадь",
-            unit_id=unit_m2.id,
-            report_role="inventory_management",
-            quantity_source="manual_inventory",
-            valid_from=date(2025, 1, 1),
-        )
-    )
+    ensure_ariston_tariffs(contract.id, am.id, valid_from=date(2025, 1, 1))
 
     for code, name in [
         ("admin", "Администратор"),

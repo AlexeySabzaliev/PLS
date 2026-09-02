@@ -33,6 +33,7 @@ CATALOGS: dict[str, tuple[type, list[str]]] = {
     "tariff_rules": (TariffRule, [
         "id", "contract_id", "amendment_id", "billing_line_code", "name",
         "unit_id", "report_role", "report_scope", "quantity_source",
+        "rate_line_code", "quantity_divisor",
         "is_custom", "price_agreed", "sort_order", "valid_from", "valid_to",
     ]),
     "staff": (StaffPosition, ["id", "code", "name", "is_active"]),
@@ -83,6 +84,8 @@ def _coerce_field(name: str, value):
         return str(value).lower() in ("1", "true", "yes", "on")
     if name in INT_FIELDS:
         return int(value)
+    if name == "quantity_divisor":
+        return float(value)
     if name in DATE_FIELDS:
         return date.fromisoformat(str(value)[:10])
     return value

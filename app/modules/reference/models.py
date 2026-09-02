@@ -77,6 +77,8 @@ class TariffRule(db.Model, TimestampMixin):
     report_role = db.Column(db.String(64))
     report_scope = db.Column(db.String(64))
     quantity_source = db.Column(db.String(64))
+    rate_line_code = db.Column(db.String(64))
+    quantity_divisor = db.Column(db.Numeric(12, 3), default=1, nullable=False)
     is_custom = db.Column(db.Boolean, default=False)
     price_agreed = db.Column(db.Boolean, default=True)
     sort_order = db.Column(db.Integer, default=0)
@@ -139,3 +141,19 @@ class UserWarehouseAccess(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False)
+
+
+class SsoAccessRequest(db.Model):
+    """Заявка на доступ: SSO-пользователь есть в AD, но нет в БД."""
+    __tablename__ = "sso_access_requests"
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    raw_identity = db.Column(db.String(255))
+    display_name = db.Column(db.String(255))
+    status = db.Column(db.String(32), default="pending", nullable=False)
+    login_attempts = db.Column(db.Integer, default=1, nullable=False)
+    first_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    last_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    resolved_at = db.Column(db.DateTime)
+    resolved_by = db.Column(db.Integer, db.ForeignKey("users.id"))
+    admin_note = db.Column(db.String(512))

@@ -113,6 +113,36 @@ LINE_QUANTITY_REGISTRY: dict[str, LineQuantityDef] = {
         default_report_role="warehouse_logistics",
         default_report_scope="period",
     ),
+    "valve_gluing": LineQuantityDef(
+        "manual_daily",
+        default_report_role="warehouse_logistics",
+        default_report_scope="period",
+    ),
+    "vietnam_stickering": LineQuantityDef(
+        "manual_daily",
+        default_report_role="warehouse_logistics",
+        default_report_scope="period",
+    ),
+    "flue_stickering": LineQuantityDef(
+        "manual_daily",
+        default_report_role="warehouse_logistics",
+        default_report_scope="period",
+    ),
+    "elco_passports": LineQuantityDef(
+        "manual_vehicle",
+        default_report_role="transport_logistics",
+        default_report_scope="vehicle",
+    ),
+    "extra_vehicle_docs_rf": LineQuantityDef(
+        "manual_vehicle",
+        default_report_role="transport_logistics",
+        default_report_scope="vehicle",
+    ),
+    "extra_vehicle_docs_rb": LineQuantityDef(
+        "manual_vehicle",
+        default_report_role="transport_logistics",
+        default_report_scope="vehicle",
+    ),
 }
 
 

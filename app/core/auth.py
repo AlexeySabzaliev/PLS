@@ -66,6 +66,9 @@ def attempt_sso_login(headers) -> dict | None:
     email, _ = normalize_identity(raw)
     user = find_user_by_email(email)
     if not user:
+        from app.core.sso_access import record_sso_access_request
+
+        record_sso_access_request(raw)
         return None
     session["user_id"] = user.id
     session.permanent = True
