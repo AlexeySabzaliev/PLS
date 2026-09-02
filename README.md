@@ -68,6 +68,9 @@ pytest -v
 
 ## GitHub
 
+
+> **GitHub (2026-09-02):** CLI установлен (C:\Program Files\GitHub CLI\gh.exe), но сессия не авторизована. Выполните gh auth login, затем команду ниже. Если gh не в PATH — вызывайте по полному пути.
+
 Если репозиторий ещё не создан на GitHub:
 
 ```bash
@@ -79,4 +82,5 @@ gh repo create PLS --public --source=. --remote=origin --push
 
 - [Архитектура](docs/ARCHITECTURE.md)
 - [Модель ролей данных](docs/BILLING_DATA_ROLES.md)
+- [Статус реализации](docs/IMPLEMENTATION_STATUS.md)
 - [Конфигураторы процессов](docs/PROCESS_CONFIGURATORS.md)
