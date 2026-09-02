@@ -1,14 +1,11 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>УСС — Транспорт</title>
-  <link rel="stylesheet" href="/static/css/main.css">
-</head>
-<body>
-  <h1>Транспортная смена</h1>
-  <p id="status">Загрузка…</p>
-  <div id="vehicles"></div>
-  <script src="/static/js/uss_transport.js"></script>
-</body>
-</html>
+{% extends "uss/base.html" %}
+{% block title %}Транспорт{% endblock %}
+{% block content %}
+  <h1>Транспортная смена</h1>
+  <p id="status" class="status">Загрузка…</p>
+  <div id="toolbar"></div>
+  <div id="content"></div>
+{% endblock %}
+{% block scripts %}
+  <script src="/static/js/uss_transport.js"></script>
+{% endblock %}

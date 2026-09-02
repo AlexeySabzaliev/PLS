@@ -23,17 +23,17 @@ def index():
 
 @bp.get("/uss/transport")
 def uss_transport():
-    return render_template("uss/transport.html", user=get_current_user())
+    return render_template("uss/transport.html", user=get_current_user(), active="transport")
 
 
 @bp.get("/uss/warehouse")
 def uss_warehouse():
-    return render_template("uss/warehouse.html", user=get_current_user())
+    return render_template("uss/warehouse.html", user=get_current_user(), active="warehouse")
 
 
 @bp.get("/uss/inventory")
 def uss_inventory():
-    return render_template("uss/inventory.html", user=get_current_user())
+    return render_template("uss/inventory.html", user=get_current_user(), active="inventory")
 
 
 @bp.get("/admin/reference")

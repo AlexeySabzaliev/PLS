@@ -373,6 +373,21 @@ def seed_test_fixtures() -> None:
             valid_from=date(2025, 1, 1),
         )
     )
+    unit_m2 = UnitOfMeasure(code="m2day", name="м²·день")
+    db.session.add(unit_m2)
+    db.session.flush()
+    db.session.add(
+        TariffRule(
+            contract_id=contract.id,
+            amendment_id=am.id,
+            billing_line_code="storage_area_extra",
+            name="Доп. площадь",
+            unit_id=unit_m2.id,
+            report_role="inventory_management",
+            quantity_source="manual_inventory",
+            valid_from=date(2025, 1, 1),
+        )
+    )
 
     for code, name in [
         ("admin", "Администратор"),

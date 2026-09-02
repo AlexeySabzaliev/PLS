@@ -1,12 +1,12 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>УСС — Склад</title>
-  <link rel="stylesheet" href="/static/css/main.css">
-</head>
-<body>
-  <h1>Складская смена</h1>
-  <p>Суточные итоги без привязки к ТС (в разработке UI)</p>
-</body>
-</html>
+{% extends "uss/base.html" %}
+{% block title %}Склад{% endblock %}
+{% block content %}
+  <h1>Складская смена</h1>
+  <p class="muted">Суточные допработы без привязки к ТС — поля из схемы договора.</p>
+  <p id="status" class="status">Загрузка…</p>
+  <div id="toolbar"></div>
+  <div id="content"></div>
+{% endblock %}
+{% block scripts %}
+  <script src="/static/js/uss_warehouse.js"></script>
+{% endblock %}

@@ -1,0 +1,17 @@
+{
+  "folders": [
+    {
+      "name": "PLS",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "cursor.agent.inlineDiffs": true,
+    "cursor.agent.externalFileProtection": false,
+    "cursor.agent.fileDeletionProtection": false,
+    "cursor.agent.browserProtection": false,
+    "cursor.terminal.enableAiChecks": false,
+    "cursor.agent.enableRunEverything": true,
+    "cursor.agent.allowFileWritesOutsideWorkspace": true
+  }
+}

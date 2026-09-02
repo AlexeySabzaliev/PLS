@@ -3,7 +3,7 @@
 Портал УСС + УЗнТ на `D:\PLS`. Эталон логики: `D:\Billings`; `D:\transport` — только для переноса кода, не целевой репозиторий.
 
 **Последнее обновление:** 2026-09-02  
-**Тесты:** `pytest -v` — 11 passed (целевое состояние на момент scaffold)
+**Тесты:** `pytest -v` — 20 passed (после P2 UI)
 
 ---
 
@@ -13,8 +13,8 @@
 |------|----------|------------|---------------|
 | 0 | Auth/SSO, роли, оболочка портала | ~70% | Полный portal shell, проверка SSO на IIS |
 | 1 | Схема БД, модели | ~75% | PostgreSQL в dev, seed prod |
-| 2 | Операции УСС (транспорт/склад/инвентаризация) | ~55% | UI редактирования, period_lock, waybills |
-| 3 | report_schema, справочники, конфигураторы, UI из схемы | ~35% | Порт `report_schema` из Billings, schema-driven UI |
+| 2 | Операции УСС (транспорт/склад/инвентаризация) | ~75% | period_lock, waybills |
+| 3 | report_schema, справочники, конфигураторы, UI из схемы | ~45% | admin UI справочников |
 | 4 | Биллинг, сверка Ariston Excel | ~5% | Порт calculator + fixtures и тесты |
 | 5 | Prod cutover, консолидация, отключение Billings | ~10% | GitHub, миграция данных, deploy |
 
@@ -38,9 +38,9 @@
 
 ## Фаза 2 — USS operations
 
-**Сделано:** `transport_shift` (list/save, daily totals); `warehouse_shift` + `operation_daily_totals`; `shift_day_confirm` + API; `inventory_shift` (базовый JSON); `/api/uss/*`.
+**Сделано:** `transport_shift` (list/save, daily totals); `warehouse_shift` + `operation_daily_totals`; `shift_day_confirm` + API; `inventory_shift` (shift_reports, schema-driven UI); `/api/uss/*`; UI смен transport / warehouse / inventory из `report_schema`.
 
-**Осталось:** полный UI смен (сейчас transport — в основном read-only); warehouse/inventory UI; `period_lock`, overtime, security; `transport_waybills`, `shift_vehicle`, `vehicle_plates`; полная логика inventory по `report_schema`.
+**Осталось:** полное редактирование транспортных строк (сейчас в основном read-only); `period_lock`, overtime, security; `transport_waybills`, `shift_vehicle`, `vehicle_plates`.
 
 ---
 
@@ -48,7 +48,7 @@
 
 **Сделано:** `BASE_PROCESS_TEMPLATES`, `resolve_process_schema`, merge + tariffs; API `/api/process-lines`, `GET …/schema`; CRUD справочников (list/create); пресеты `ariston_standard`, `gazprom_logistics`; заготовка `admin/reference.html`.
 
-**Осталось:** порт `report_schema.py`, `tariff_quantity`, `tariff_report`, `tariff_report_lines`; полный CRUD и валидация; **динамический UI** из схемы; admin UI справочников (как `catalog-ui.js` в Billings).
+**Осталось:** порт `report_schema.py`, `tariff_quantity`, `tariff_report`, `tariff_report_lines` (полный паритет Billings); полный CRUD и валидация; **admin UI** справочников (как `catalog-ui.js` в Billings).
 
 ---
 

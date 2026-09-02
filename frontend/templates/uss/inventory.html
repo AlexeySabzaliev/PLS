@@ -1,12 +1,12 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>УСС — Запасы</title>
-  <link rel="stylesheet" href="/static/css/main.css">
-</head>
-<body>
-  <h1>Управление запасами</h1>
-  <p>Заглушка: area_entries / extra_entries</p>
-</body>
-</html>
+{% extends "uss/base.html" %}
+{% block title %}Запасы{% endblock %}
+{% block content %}
+  <h1>Управление запасами</h1>
+  <p class="muted">Площади и допы по дню — из схемы договора (inventory_management).</p>
+  <p id="status" class="status">Загрузка…</p>
+  <div id="toolbar"></div>
+  <div id="content"></div>
+{% endblock %}
+{% block scripts %}
+  <script src="/static/js/uss_inventory.js"></script>
+{% endblock %}

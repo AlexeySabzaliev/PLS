@@ -1,3 +1,121 @@
-body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 960px; }
-header { border-bottom: 1px solid #ccc; margin-bottom: 1rem; }
-nav a { margin-right: 1rem; }
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  margin: 0;
+  background: #f6f7f9;
+  color: #1a1a1a;
+}
+
+.pls-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  padding: 0.75rem 1.5rem;
+  background: #1e3a5f;
+  color: #fff;
+}
+
+.pls-logo {
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 1.1rem;
+}
+
+.pls-nav a {
+  color: #c8d8ec;
+  text-decoration: none;
+  margin-right: 1rem;
+  padding: 0.25rem 0;
+}
+
+.pls-nav a.active,
+.pls-nav a:hover {
+  color: #fff;
+  border-bottom: 2px solid #6eb5ff;
+}
+
+.pls-user {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: #c8d8ec;
+}
+
+.pls-main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+header h1 { margin-top: 0; }
+
+.status.error { color: #b00020; }
+.muted { color: #666; font-size: 0.95rem; }
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+
+.contract-block {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+
+.contract-block h2 { margin-top: 0; font-size: 1.1rem; }
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.data-table th,
+.data-table td {
+  border: 1px solid #e0e0e0;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.data-table input {
+  width: 100%;
+  min-width: 4rem;
+  box-sizing: border-box;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.period-form button,
+.toolbar button,
+.data-table button {
+  cursor: pointer;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #1e3a5f;
+  background: #1e3a5f;
+  color: #fff;
+  border-radius: 4px;
+}
+
+.period-form button:hover,
+.toolbar button:hover {
+  background: #2a5080;
+}
+
+nav a { margin-right: 1rem; }

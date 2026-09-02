@@ -4,6 +4,9 @@
 
 ## Быстрый старт
 
+> **Cursor:** откройте `PLS.code-workspace` (не Billings/OUB), Run Mode = Run Everything.  
+> Подробно: [docs/CURSOR_DEV.md](docs/CURSOR_DEV.md)
+
 ### PostgreSQL (рекомендуется)
 
 ```powershell

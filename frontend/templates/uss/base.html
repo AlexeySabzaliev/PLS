@@ -13,7 +13,11 @@
       <a href="/uss/transport" {% if active == 'transport' %}class="active"{% endif %}>Транспорт</a>
       <a href="/uss/warehouse" {% if active == 'warehouse' %}class="active"{% endif %}>Склад</a>
       <a href="/uss/inventory" {% if active == 'inventory' %}class="active"{% endif %}>Запасы</a>
+      <a href="/admin/reference">Справочники</a>
     </nav>
+    {% if user %}
+    <span class="pls-user">{{ user.email }}</span>
+    {% endif %}
   </header>
   <main class="pls-main">
     {% block content %}{% endblock %}
