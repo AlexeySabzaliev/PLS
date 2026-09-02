@@ -28,7 +28,29 @@ class VehicleOperation(db.Model):
     registered_at = db.Column(db.DateTime)
     departed_at = db.Column(db.DateTime)
     report_quantities = db.Column(db.JSON, default=dict)
+    vehicle_type_id = db.Column(db.Integer, db.ForeignKey("vehicle_types.id"))
+    source = db.Column(db.String(32), nullable=False, default="manual")
+    security_request_id = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    waybills = db.relationship(
+        "VehicleWaybill",
+        back_populates="operation",
+        cascade="all, delete-orphan",
+        order_by="VehicleWaybill.sort_order",
+    )
+
+
+class VehicleWaybill(db.Model):
+    """Накладные по строке ТС (несколько на одну машину)."""
+    __tablename__ = "vehicle_waybills"
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_operation_id = db.Column(
+        db.Integer, db.ForeignKey("vehicle_operations.id", ondelete="CASCADE"), nullable=False,
+    )
+    waybill_number = db.Column(db.String(256))
+    mx_number = db.Column(db.String(256))
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    operation = db.relationship("VehicleOperation", back_populates="waybills")
 
 
 class OperationDailyTotal(db.Model):

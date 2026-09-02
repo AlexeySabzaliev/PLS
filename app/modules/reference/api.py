@@ -18,6 +18,7 @@ from app.modules.reference.models import (
     TariffRule,
     UnitOfMeasure,
     VehiclePlate,
+    VehicleType,
     Warehouse,
 )
 
@@ -38,6 +39,7 @@ CATALOGS: dict[str, tuple[type, list[str]]] = {
     ]),
     "staff": (StaffPosition, ["id", "code", "name", "is_active"]),
     "vehicles": (VehiclePlate, ["id", "plate_number", "vehicle_type", "is_active"]),
+    "vehicle_types": (VehicleType, ["id", "code", "name", "sort_order"]),
     "roles": (Role, ["id", "code", "name"]),
 }
 
@@ -53,6 +55,7 @@ SECTION_MAP = {
     "tariff_rules": "ref_tariff_codes",
     "staff": "ref_staff",
     "vehicles": "ref_vehicles",
+    "vehicle_types": "ref_vehicles",
     "roles": "ref_roles",
 }
 
@@ -60,7 +63,7 @@ DATE_FIELDS = frozenset({"effective_from", "effective_to", "valid_from", "valid_
 BOOL_FIELDS = frozenset({"is_active", "is_custom", "price_agreed"})
 INT_FIELDS = frozenset({
     "client_id", "warehouse_id", "product_type_id", "contract_id",
-    "amendment_id", "unit_id", "sort_order",
+    "amendment_id", "unit_id", "sort_order", "vehicle_type_id",
 })
 
 

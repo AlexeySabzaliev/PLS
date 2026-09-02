@@ -18,6 +18,7 @@ from app.modules.reference.models import (
 )
 from app.modules.uss.models import OperationDailyTotal, ShiftReport, VehicleOperation
 from app.modules.uss.services.shift_handling import infer_handling_from_volumes
+from app.modules.uss.services.transport_waybills import replace_waybills
 from app.modules.uss.services.vehicle_plates import combine_vehicle_plates, parse_vehicle_plates
 from app.seeds.ariston_tariffs import ensure_ariston_billing_rates, ensure_ariston_tariffs
 from app.seeds.billing_excel_ref import read_billing_reference, read_prr_rows
@@ -274,9 +275,9 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
       vol = in_m if op_type == "inbound" else out_m
     handling = infer_handling_from_volumes(in_manual, in_mech, out_manual, out_mech) or None
     waybill = _str_cell(raw.get("waybill"))
+    mx = _mx_value(raw.get("mx1") if op_type == "inbound" else raw.get("mx3"), waybill)
 
-    db.session.add(
-      VehicleOperation(
+    vo = VehicleOperation(
         contract_id=contract.id,
         warehouse_id=wh.id,
         operation_date=day,
@@ -284,9 +285,6 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
         tractor_plate=tractor,
         trailer_plate=trailer,
         operation_type_code=op_type,
-        waybill_number=waybill,
-        mx1_number=_mx_value(raw.get("mx1"), waybill),
-        mx3_number=_mx_value(raw.get("mx3"), waybill),
         seal_number=_str_cell(raw.get("seal")),
         torg2_number=_str_cell(raw.get("torg2")),
         volume_document_m3=vol,
@@ -299,8 +297,11 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
           "inbound_mech_m3": float(in_mech),
           "outbound_mech_m3": float(out_mech),
         },
-      )
     )
+    db.session.add(vo)
+    db.session.flush()
+    if waybill or mx:
+      replace_waybills(vo.id, [{"waybill_number": waybill or "", "mx_number": mx or ""}], op_type)
     stats["vehicles"] += 1
     op_days.append(day)
 

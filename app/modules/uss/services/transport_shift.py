@@ -1,14 +1,24 @@
 """Транспортная смена: vehicle_operations + суточные допы."""
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime
 
 from app.db import db
-from app.modules.reference.models import Contract, ProductType
+from app.modules.reference.models import Client, Contract, ProductType, VehicleType, Warehouse
 from app.modules.uss.models import VehicleOperation
 from app.modules.uss.services.operation_daily_totals import list_daily_totals, upsert_daily_totals
 from app.modules.uss.services.report_schema import schema_for_contract_role
+from app.modules.uss.services.security_intranet import (
+    fetch_all_for_warehouse,
+    fetch_vehicle_requests,
+    security_status,
+)
 from app.modules.uss.services.shift_handling import sync_handling_m3_updates
+from app.modules.uss.services.transport_waybills import (
+    load_waybills_for_operations,
+    replace_waybills,
+    waybills_from_legacy_row,
+)
 from app.modules.uss.services.vehicle_plates import combine_vehicle_plates, parse_vehicle_plates
 
 REPORT_ROLE = "transport_logistics"
@@ -17,16 +27,19 @@ _VEHICLE_FIELDS = (
     "operation_type_code",
     "tractor_plate",
     "trailer_plate",
-    "waybill_number",
-    "mx1_number",
-    "mx3_number",
     "seal_number",
     "torg2_number",
     "volume_document_m3",
     "handling_type_code",
     "extra_handling_m3",
     "extra_document_set_qty",
+    "vehicle_type_id",
 )
+
+
+def _list_vehicle_types() -> list[dict]:
+    rows = VehicleType.query.order_by(VehicleType.sort_order, VehicleType.id).all()
+    return [{"id": r.id, "code": r.code, "name": r.name} for r in rows]
 
 
 def _parse_time_on_date(op_date: date, value) -> datetime | None:
@@ -97,20 +110,24 @@ def _legacy_fix_operation_handling(row: VehicleOperation) -> tuple[str | None, s
     return op, handling
 
 
-def _serialize_vehicle(row: VehicleOperation) -> dict:
+def _serialize_vehicle(row: VehicleOperation, waybills_map: dict[int, list[dict]]) -> dict:
     tractor = row.tractor_plate
     trailer = row.trailer_plate
     if not tractor and row.plate_number:
         tractor, trailer = parse_vehicle_plates(row.plate_number)
     op_type, handling = _legacy_fix_operation_handling(row)
     rq = dict(row.report_quantities or {})
+    waybills = waybills_map.get(row.id) or waybills_from_legacy_row(row)
     return {
         "id": row.id,
         "contract_id": row.contract_id,
+        "source": row.source or "manual",
         "plate_number": row.plate_number or combine_vehicle_plates(tractor, trailer),
         "tractor_plate": tractor,
         "trailer_plate": trailer,
         "operation_type_code": op_type or "inbound",
+        "vehicle_type_id": row.vehicle_type_id,
+        "waybills": waybills,
         "waybill_number": row.waybill_number,
         "mx1_number": row.mx1_number,
         "mx3_number": row.mx3_number,
@@ -143,6 +160,7 @@ def list_transport_shift(user: dict, warehouse_id: int, day: date) -> dict:
         warehouse_id=warehouse_id,
         operation_date=day,
     ).order_by(VehicleOperation.id).all()
+    wb_map = load_waybills_for_operations([v.id for v in vehicles])
     schemas = {
         str(c.id): schema_for_contract_role(c.id, day, REPORT_ROLE) for c in contracts
     }
@@ -156,7 +174,9 @@ def list_transport_shift(user: dict, warehouse_id: int, day: date) -> dict:
         "contracts": [{"id": c.id, "number": c.number, "client_id": c.client_id} for c in contracts],
         "schemas": schemas,
         "daily_totals": daily_totals,
-        "vehicles": [_serialize_vehicle(v) for v in vehicles],
+        "vehicle_types": _list_vehicle_types(),
+        "security": security_status(),
+        "vehicles": [_serialize_vehicle(v, wb_map) for v in vehicles],
     }
 
 
@@ -176,6 +196,7 @@ def save_vehicle_row(user: dict, payload: dict) -> dict:
             contract_id=payload["contract_id"],
             warehouse_id=wh_id,
             operation_date=op_date,
+            source="manual",
         )
         db.session.add(row)
 
@@ -186,6 +207,8 @@ def save_vehicle_row(user: dict, payload: dict) -> dict:
                 val = _normalize_handling(val) or None
             elif key == "operation_type_code":
                 val = _normalize_operation_type(val) or "inbound"
+            elif key == "vehicle_type_id":
+                val = int(val) if val not in (None, "", 0, "0") else None
             elif key in ("extra_document_set_qty",) and val == "":
                 val = None
             setattr(row, key, val)
@@ -207,6 +230,10 @@ def save_vehicle_row(user: dict, payload: dict) -> dict:
     rq.update(sync_handling_m3_updates(merged))
     row.report_quantities = rq
 
+    db.session.flush()
+    if "waybills" in payload:
+        replace_waybills(row.id, payload.get("waybills") or [], row.operation_type_code or "inbound")
+
     db.session.commit()
     return {"id": row.id, "saved": True}
 
@@ -224,3 +251,96 @@ def save_transport_daily(user: dict, payload: dict) -> dict:
         payload.get("entries") or [],
     )
     return {"saved": saved}
+
+
+def _upsert_security_vehicle(
+    *,
+    contract_id: int,
+    warehouse_id: int,
+    day: date,
+    security_request_id: str,
+    vehicle_number: str,
+) -> int:
+    tractor, trailer = parse_vehicle_plates(vehicle_number)
+    combined = combine_vehicle_plates(tractor, trailer) or vehicle_number
+    existing = VehicleOperation.query.filter_by(
+        contract_id=contract_id,
+        operation_date=day,
+        security_request_id=security_request_id,
+    ).first()
+    if existing:
+        existing.plate_number = combined
+        existing.tractor_plate = tractor
+        existing.trailer_plate = trailer
+        return existing.id
+    row = VehicleOperation(
+        contract_id=contract_id,
+        warehouse_id=warehouse_id,
+        operation_date=day,
+        plate_number=combined,
+        tractor_plate=tractor,
+        trailer_plate=trailer,
+        operation_type_code="inbound",
+        source="security",
+        security_request_id=security_request_id,
+    )
+    db.session.add(row)
+    db.session.flush()
+    return row.id
+
+
+def sync_transport_security(user: dict, warehouse_id: int, day: date) -> dict:
+    wh_ids = user.get("warehouse_ids") or []
+    if warehouse_id not in wh_ids and not user.get("is_admin"):
+        return {"error": "forbidden"}
+
+    contracts = (
+        Contract.query.join(Client).join(Warehouse)
+        .filter(
+            Contract.warehouse_id == warehouse_id,
+            Contract.status == "active",
+        )
+        .all()
+    )
+    if not contracts:
+        return {"synced": 0, "source": "none", "details": []}
+
+    wh = db.session.get(Warehouse, warehouse_id)
+    visit_place = wh.security_visit_place if wh else None
+    prefetched, fetch_source = fetch_all_for_warehouse(visit_place, day)
+    sources: set[str] = {fetch_source}
+    total = 0
+    details = []
+
+    for contract in contracts:
+        client = db.session.get(Client, contract.client_id)
+        rows, source = fetch_vehicle_requests(
+            client_name=client.name if client else "",
+            security_name=client.security_name if client else None,
+            visit_place=visit_place,
+            day=day,
+            prefetched=prefetched,
+            fetch_source=fetch_source,
+        )
+        sources.add(source)
+        for item in rows:
+            _upsert_security_vehicle(
+                contract_id=contract.id,
+                warehouse_id=warehouse_id,
+                day=day,
+                security_request_id=item.request_id,
+                vehicle_number=item.vehicle_number,
+            )
+            total += 1
+        details.append({
+            "contract_id": contract.id,
+            "fetched": len(rows),
+        })
+
+    db.session.commit()
+    return {
+        "synced": total,
+        "source": ",".join(sorted(sources)),
+        "details": details,
+        "security": security_status(),
+    }

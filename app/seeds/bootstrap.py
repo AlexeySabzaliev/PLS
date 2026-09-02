@@ -26,6 +26,7 @@ from app.modules.reference.models import (
 )
 from app.seeds.ariston_tariffs import ensure_ariston_tariffs
 from app.seeds.ariston_august import seed_ariston_strelna_august
+from app.seeds.vehicle_types import ensure_vehicle_types
 
 PRODUCT_TYPES = [
     ("RESPONSIBLE_STORAGE", "Ответственное хранение"),
@@ -115,6 +116,7 @@ def seed_reference(*, verbose: bool = False) -> dict:
                 stats["section_permissions"] += 1
 
     db.session.commit()
+    stats["vehicle_types"] = ensure_vehicle_types()
     if verbose:
         print(f"seed-reference: {stats}")
     return stats
@@ -340,4 +342,5 @@ def seed_test_fixtures() -> None:
             config_json=EXAMPLE_LINE_CONFIGS["gazprom_logistics"],
         )
     )
+    ensure_vehicle_types()
     db.session.commit()

@@ -10,7 +10,12 @@ from app.core.permissions import user_has_uss_section
 from app.modules.uss.services.inventory_shift import get_inventory_shift, save_inventory_shift
 from app.modules.uss.services.report_schema import schema_for_contract_role
 from app.modules.uss.services.shift_day_confirm import confirm_day, day_summary
-from app.modules.uss.services.transport_shift import list_transport_shift, save_transport_daily, save_vehicle_row
+from app.modules.uss.services.transport_shift import (
+    list_transport_shift,
+    save_transport_daily,
+    save_vehicle_row,
+    sync_transport_security,
+)
 from app.modules.uss.services.warehouse_shift import list_warehouse_shift, save_warehouse_shift
 
 bp = Blueprint("uss_api", __name__, url_prefix="/api/uss")
@@ -48,6 +53,20 @@ def transport_daily_save():
     result = save_transport_daily(g.user, request.get_json(silent=True) or {})
     if result.get("error"):
         return result, 400
+    return result
+
+
+@bp.post("/transport/sync-security")
+@login_required
+def transport_sync_security():
+    if not user_has_uss_section(g.user, "uss_ops_transport"):
+        return {"error": "forbidden"}, 403
+    data = request.get_json(silent=True) or {}
+    wh = data.get("warehouse_id") or request.args.get("warehouse_id", type=int)
+    day = date.fromisoformat(str(data.get("date") or request.args.get("date", date.today().isoformat()))[:10])
+    result = sync_transport_security(g.user, wh, day)
+    if result.get("error"):
+        return result, 403
     return result
 
 

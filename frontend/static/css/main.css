@@ -105,6 +105,42 @@ header h1 { margin-top: 0; }
   max-width: 100%;
 }
 
+.waybills-block {
+  min-width: 14rem;
+}
+
+.waybill-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.waybill-line input {
+  flex: 1 1 5rem;
+  min-width: 4rem;
+}
+
+.waybill-line .mx-label {
+  font-size: 0.75rem;
+  color: #666;
+  white-space: nowrap;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: #1565c0;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  font-size: 0.85rem;
+}
+
+.toolbar-btn {
+  margin-left: 0.5rem;
+}
+
 .field-row {
   display: grid;
   grid-template-columns: 1fr 120px;

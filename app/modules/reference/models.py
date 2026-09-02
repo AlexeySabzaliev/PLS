@@ -106,6 +106,15 @@ class VehiclePlate(db.Model):
     is_active = db.Column(db.Boolean, default=True)
 
 
+class VehicleType(db.Model):
+    """Справочник типов ТС для транспортного отчёта."""
+    __tablename__ = "vehicle_types"
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(64), unique=True, nullable=False)
+    name = db.Column(db.String(256), nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+
 class Role(db.Model):
     __tablename__ = "roles"
     id = db.Column(db.Integer, primary_key=True)

@@ -4,10 +4,25 @@
   const toolbarEl = document.getElementById('toolbar');
   const contentEl = document.getElementById('content');
   const role = 'transport_logistics';
+  let vehicleTypes = [];
 
   function setStatus(msg, isError) {
     statusEl.textContent = msg;
     statusEl.className = isError ? 'status error' : 'status';
+  }
+
+  async function syncSecurity(warehouseId, date) {
+    setStatus('Синхронизация с охраной…');
+    try {
+      const data = await UssApi.json('/api/uss/transport/sync-security', {
+        method: 'POST',
+        body: JSON.stringify({ warehouse_id: Number(warehouseId), date }),
+      });
+      setStatus(`Охрана: +${data.synced} ТС (${data.source})`);
+      load();
+    } catch (e) {
+      setStatus(e.message, true);
+    }
   }
 
   async function load() {
@@ -34,9 +49,18 @@
         },
       });
 
+      const syncBtn = document.createElement('button');
+      syncBtn.type = 'button';
+      syncBtn.id = 'btn-sync-security';
+      syncBtn.textContent = 'С охраны';
+      syncBtn.className = 'toolbar-btn';
+      syncBtn.addEventListener('click', () => syncSecurity(warehouseId, ctx.date));
+      toolbarEl.querySelector('.toolbar')?.appendChild(syncBtn);
+
       const data = await UssApi.json(
         `/api/uss/transport/shift?warehouse_id=${warehouseId}&date=${ctx.date}`
       );
+      vehicleTypes = data.vehicle_types || [];
 
       contentEl.innerHTML = '';
       if (!data.contracts?.length) {
@@ -81,7 +105,8 @@
         contentEl.appendChild(block);
       });
 
-      setStatus(`Склад ${warehouseId}, ${data.operation_date}`);
+      const sec = data.security?.source === 'demo' ? ' (демо-охрана)' : '';
+      setStatus(`Склад ${warehouseId}, ${data.operation_date}${sec}`);
     } catch (e) {
       setStatus(e.message === 'unauthorized' ? 'Войдите через SSO или /api/auth/login' : e.message, true);
     }
@@ -127,7 +152,7 @@
     addBtn.type = 'button';
     addBtn.textContent = '+ Добавить ТС';
     addBtn.addEventListener('click', () => {
-      const empty = { contract_id: contractId, report_quantities: {} };
+      const empty = { contract_id: contractId, report_quantities: {}, waybills: [] };
       const tr = vehicleRow(empty, fields, vInputs, warehouseId, opDate, true);
       tbody.appendChild(tr);
     });
@@ -139,11 +164,28 @@
     const inputs = {};
     const rqInputs = {};
     const rq = vehicle.report_quantities || {};
+    let waybillsBlock = null;
+
     fields.forEach((f) => {
       const td = document.createElement('td');
-      const inp = UssApi.renderSchemaField(f, vehicle[f.field]);
-      inputs[f.field] = inp;
-      td.appendChild(inp);
+      if (f.input_type === 'waybills') {
+        waybillsBlock = UssApi.renderWaybillsBlock(
+          vehicle.waybills,
+          vehicle.operation_type_code || 'inbound',
+          true,
+        );
+        inputs.waybills = waybillsBlock;
+        td.appendChild(waybillsBlock);
+      } else {
+        const inp = UssApi.renderSchemaField(f, vehicle[f.field], { vehicleTypes });
+        inputs[f.field] = inp;
+        td.appendChild(inp);
+        if (f.field === 'operation_type_code') {
+          inp.addEventListener('change', () => {
+            waybillsBlock?.updateMxLabels(inp.value);
+          });
+        }
+      }
       tr.appendChild(td);
     });
     vInputs.forEach((inp) => {
@@ -170,6 +212,10 @@
       };
       if (vehicle.id) payload.id = vehicle.id;
       fields.forEach((f) => {
+        if (f.input_type === 'waybills') {
+          payload.waybills = inputs.waybills?.collect?.() || [];
+          return;
+        }
         const v = inputs[f.field].value;
         payload[f.field] = v === '' ? null : v;
       });
