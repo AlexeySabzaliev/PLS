@@ -3,7 +3,7 @@
 Портал УСС + УЗнТ на `D:\PLS`. Эталон логики: `D:\Billings`; `D:\transport` — только для переноса кода, не целевой репозиторий.
 
 **Последнее обновление:** 2026-09-02  
-**Тесты:** `pytest -v` — 35 passed
+**Тесты:** `pytest -v` — 39 passed
 
 ---
 
@@ -14,7 +14,7 @@
 | 0 | Auth/SSO, роли, оболочка портала | ~70% | Полный portal shell, проверка SSO на IIS |
 | 1 | Схема БД, модели | ~75% | PostgreSQL в dev, seed prod |
 | 2 | Операции УСС (транспорт/склад/инвентаризация) | ~75% | period_lock, waybills |
-| 3 | report_schema, справочники, конфигураторы, UI из схемы | ~60% | admin UI справочников |
+| 3 | report_schema, справочники, конфигураторы, UI из схемы | ~70% | UI ставок/ДС (catalog-ui) |
 | 4 | Биллинг, сверка Ariston Excel | ~5% | Порт calculator + fixtures и тесты |
 | 5 | Prod cutover, консолидация, отключение Billings | ~10% | GitHub, миграция данных, deploy |
 
@@ -46,9 +46,9 @@
 
 ## Фаза 3 — report_schema, configurators, UI
 
-**Сделано:** `BASE_PROCESS_TEMPLATES`, `resolve_process_schema`, merge + tariffs; API `/api/process-lines`, `GET …/schema`; CRUD справочников (list/create); пресеты `ariston_standard`, `gazprom_logistics`; заготовка `admin/reference.html`; порт `tariff_codes`, `tariff_quantity`, `tariff_report`, `tariff_report_lines`, `report_schema` (паритет Billings для схем и quantity).
+**Сделано:** `BASE_PROCESS_TEMPLATES`, `resolve_process_schema`, merge + tariffs; API `/api/process-lines`, `GET …/schema`; CRUD справочников (list/create/update/delete); пресеты `ariston_standard`, `gazprom_logistics`; **admin UI** `reference-ui.js`; порт `tariff_codes`, `tariff_quantity`, `tariff_report`, `tariff_report_lines`, `report_schema`.
 
-**Осталось:** полный CRUD и валидация справочников; **admin UI** (как `catalog-ui.js` в Billings); `accounting_mode` в модели/миграции; `contract_parameters` для биллинга.
+**Осталось:** расширенный UI ставок/ДС (как `catalog-ui.js` в Billings); `accounting_mode` в модели/миграции; `contract_parameters` для биллинга.
 
 ---
 
@@ -72,7 +72,7 @@
 
 1. **P0:** GitHub push (`gh auth login`).
 2. **P1:** ~~Alembic, seed, PostgreSQL~~ — сделано; проверить prod deploy.
-3. **P2:** ~~Schema-driven UI УСС; порт report_schema / tariff_*~~ — сделано; admin UI справочников.
+3. **P2:** ~~Schema-driven UI УСС; порт report_schema / tariff_*~~ — сделано.
 4. **P3:** Billing + Ariston tests.
 5. **P4:** УЗнТ и prod cutover.
 
