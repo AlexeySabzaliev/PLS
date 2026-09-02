@@ -32,6 +32,32 @@ const UssApi = {
     return m;
   },
 
+  renderSchemaField(fieldDef, value) {
+    const f = fieldDef;
+    let el;
+    if (f.input_type === 'select') {
+      el = document.createElement('select');
+      (f.choices || []).forEach((opt) => {
+        const o = document.createElement('option');
+        o.value = opt.value;
+        o.textContent = opt.label;
+        el.appendChild(o);
+      });
+      el.value = value ?? '';
+    } else if (f.input_type === 'time') {
+      el = document.createElement('input');
+      el.type = 'time';
+      el.value = value ? String(value).slice(0, 5) : '';
+    } else {
+      el = document.createElement('input');
+      if (f.input_type === 'number') el.type = 'number';
+      else el.type = 'text';
+      el.value = value ?? '';
+    }
+    el.name = f.field;
+    return el;
+  },
+
   renderPeriodForm(container, schema, totals, onSave) {
     const inputs = schema?.period_inputs || [];
     if (!inputs.length) {

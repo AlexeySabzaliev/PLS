@@ -17,17 +17,33 @@ def test_save_vehicle_row(auth_client, client):
         "warehouse_id": 1,
         "contract_id": 1,
         "operation_date": "2026-08-01",
-        "plate_number": "A123BC78",
-        "volume_document_m3": 12.5,
+        "tractor_plate": "A123BC78",
+        "operation_type_code": "inbound",
         "handling_type_code": "manual",
+        "volume_document_m3": 12.5,
     }
     resp = client.post("/api/uss/transport/vehicles", json=payload)
     assert resp.status_code == 200
     assert resp.json["saved"] is True
 
     resp2 = client.get("/api/uss/transport/shift?warehouse_id=1&date=2026-08-01")
-    assert len(resp2.json["vehicles"]) == 1
-    assert resp2.json["vehicles"][0]["plate_number"] == "A123BC78"
+    row = resp2.json["vehicles"][0]
+    assert row["tractor_plate"] == "A123BC78"
+    assert row["operation_type_code"] == "inbound"
+    assert row["handling_type_code"] == "manual"
+    assert row["report_quantities"]["inbound_manual_m3"] == 12.5
+
+
+def test_transport_schema_has_operation_select(auth_client, client):
+    auth_client("transport@test.local", "test")
+    resp = client.get("/api/uss/transport/shift?warehouse_id=1&date=2026-08-01")
+    fields = resp.json["schemas"]["1"]["vehicle_fixed_fields"]
+    op = next(f for f in fields if f["field"] == "operation_type_code")
+    handling = next(f for f in fields if f["field"] == "handling_type_code")
+    assert op["input_type"] == "select"
+    assert handling["input_type"] == "select"
+    assert any(c["value"] == "inbound" for c in op["choices"])
+    assert any(c["value"] == "manual" for c in handling["choices"])
 
 
 def test_save_vehicle_report_quantities(auth_client, client):
@@ -36,14 +52,14 @@ def test_save_vehicle_report_quantities(auth_client, client):
         "warehouse_id": 1,
         "contract_id": 1,
         "operation_date": "2026-08-02",
-        "plate_number": "X999XX99",
+        "tractor_plate": "X999XX99",
         "report_quantities": {"extra_vehicle_docs_rf": 2, "elco_passports": 1},
     }
     resp = client.post("/api/uss/transport/vehicles", json=payload)
     assert resp.status_code == 200
 
     resp2 = client.get("/api/uss/transport/shift?warehouse_id=1&date=2026-08-02")
-    row = next(v for v in resp2.json["vehicles"] if v["plate_number"] == "X999XX99")
+    row = next(v for v in resp2.json["vehicles"] if v["tractor_plate"] == "X999XX99")
     assert row["report_quantities"]["extra_vehicle_docs_rf"] == 2
     assert row["report_quantities"]["elco_passports"] == 1
 

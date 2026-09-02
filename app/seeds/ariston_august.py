@@ -17,6 +17,8 @@ from app.modules.reference.models import (
     Warehouse,
 )
 from app.modules.uss.models import OperationDailyTotal, ShiftReport, VehicleOperation
+from app.modules.uss.services.shift_handling import infer_handling_from_volumes
+from app.modules.uss.services.vehicle_plates import combine_vehicle_plates, parse_vehicle_plates
 from app.seeds.ariston_tariffs import ensure_ariston_billing_rates, ensure_ariston_tariffs
 from app.seeds.billing_excel_ref import read_billing_reference, read_prr_rows
 
@@ -81,18 +83,30 @@ def _dec(value) -> Decimal:
     return Decimal("0")
 
 
-def _norm_plate(raw: str | None) -> str:
-  s = str(raw or "").strip().replace("//", "/")
-  return s[:32] if s else "—"
+def _str_cell(value) -> str | None:
+  if value is None or value == "":
+    return None
+  s = str(value).strip()
+  return s or None
 
 
-def _handling(op_type: str | None) -> str:
+def _operation_type(op_type: str | None) -> str:
   t = (op_type or "").lower()
   if "приём" in t or "прием" in t:
     return "inbound"
   if "отгруз" in t:
     return "outbound"
-  return "other"
+  return "inbound"
+
+
+def _mx_value(raw, waybill: str | None) -> str | None:
+  mx = _str_cell(raw)
+  if not mx:
+    return None
+  wb = (waybill or "").strip()
+  if wb and mx == wb:
+    return None
+  return mx[:256]
 
 
 def _distribute(total: int, days: list[date]) -> dict[date, int]:
@@ -246,15 +260,20 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
     day = _to_date(raw.get("operation_date"))
     if not day or day.month != MONTH:
       continue
-    plate = _norm_plate(raw.get("vehicle"))
+    tractor, trailer = parse_vehicle_plates(_str_cell(raw.get("vehicle")))
+    plate = combine_vehicle_plates(tractor, trailer) or "—"
     vol = _dec(raw.get("volume"))
-    in_m = _dec(raw.get("in_manual")) + _dec(raw.get("in_mech"))
-    out_m = _dec(raw.get("out_manual")) + _dec(raw.get("out_mech"))
-    handling = _handling(raw.get("op_type"))
-    if handling == "inbound" and vol == 0:
-      vol = in_m
-    elif handling == "outbound" and vol == 0:
-      vol = out_m
+    in_manual = _dec(raw.get("in_manual"))
+    in_mech = _dec(raw.get("in_mech"))
+    out_manual = _dec(raw.get("out_manual"))
+    out_mech = _dec(raw.get("out_mech"))
+    in_m = in_manual + in_mech
+    out_m = out_manual + out_mech
+    op_type = _operation_type(raw.get("op_type"))
+    if vol == 0:
+      vol = in_m if op_type == "inbound" else out_m
+    handling = infer_handling_from_volumes(in_manual, in_mech, out_manual, out_mech) or None
+    waybill = _str_cell(raw.get("waybill"))
 
     db.session.add(
       VehicleOperation(
@@ -262,15 +281,23 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
         warehouse_id=wh.id,
         operation_date=day,
         plate_number=plate,
+        tractor_plate=tractor,
+        trailer_plate=trailer,
+        operation_type_code=op_type,
+        waybill_number=waybill,
+        mx1_number=_mx_value(raw.get("mx1"), waybill),
+        mx3_number=_mx_value(raw.get("mx3"), waybill),
+        seal_number=_str_cell(raw.get("seal")),
+        torg2_number=_str_cell(raw.get("torg2")),
         volume_document_m3=vol,
         handling_type_code=handling,
         registered_at=_to_dt(day, raw.get("reg_time")),
         departed_at=_to_dt(day, raw.get("dep_time")),
         report_quantities={
-          "inbound_manual_m3": float(_dec(raw.get("in_manual"))),
-          "outbound_manual_m3": float(_dec(raw.get("out_manual"))),
-          "inbound_mech_m3": float(_dec(raw.get("in_mech"))),
-          "outbound_mech_m3": float(_dec(raw.get("out_mech"))),
+          "inbound_manual_m3": float(in_manual),
+          "outbound_manual_m3": float(out_manual),
+          "inbound_mech_m3": float(in_mech),
+          "outbound_mech_m3": float(out_mech),
         },
       )
     )

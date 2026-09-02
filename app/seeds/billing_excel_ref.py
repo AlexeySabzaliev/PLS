@@ -70,7 +70,8 @@ def read_billing_reference(
 def read_prr_rows(path: Path) -> list[dict]:
   """Строки листа ПРР для импорта vehicle_operations."""
   wb = load_workbook(path, read_only=True, data_only=True)
-  ws = wb.worksheets[1]
+  sheet = "ПРР" if "ПРР" in wb.sheetnames else wb.worksheets[1].title
+  ws = wb[sheet]
   rows_iter = ws.iter_rows(values_only=True)
   header = next(rows_iter)
   col = {str(v).strip(): i for i, v in enumerate(header) if v}
@@ -84,19 +85,24 @@ def read_prr_rows(path: Path) -> list[dict]:
 
   ix = {
     "operation_date": col.get("Дата отчета"),
+    "waybill": col.get("Номер накладной"),
     "vehicle": col.get("Номер ТС:") or col.get("Номер ТС"),
     "op_type": col.get("Тип операции"),
-    "volume": idx("объем", "документ"),
-    "in_mech": idx("входящая", "механ"),
-    "in_manual": idx("входящая", "ручн"),
-    "out_mech": idx("исходящая", "механ"),
-    "out_manual": idx("исходящая", "ручн"),
-    "reg_time": idx("регистрации", "тс"),
-    "dep_time": idx("убытия", "тс"),
+    "volume": idx("объем", "документ") or col.get("Объем груза по документам (м³)"),
+    "in_mech": idx("входящая", "механ") or col.get("Входящая поставка, механическая выгрузка, (м³)"),
+    "in_manual": idx("входящая", "ручн") or col.get("Входящая поставка, ручная выгрузка, (м³)"),
+    "out_mech": idx("исходящая", "механ") or col.get("Исходящая поставка, механизированная погрузка, (м³)"),
+    "out_manual": idx("исходящая", "ручн") or col.get("Исходящая поставка, ручная погрузка, (м³)"),
+    "reg_time": col.get("Время регистрации ТС в офисе:") or idx("регистрации", "тс"),
+    "dep_time": col.get("Время убытия ТС:") or idx("убытия", "тс"),
+    "torg2": col.get("№ акта ТОРГ-2"),
+    "mx1": col.get("№ МХ-1"),
+    "mx3": col.get("№ МХ-3"),
+    "seal": col.get("№ пломбы"),
   }
   result: list[dict] = []
   for row in rows_iter:
-    if not row or not row[ix["operation_date"]]:
+    if not row or ix["operation_date"] is None or not row[ix["operation_date"]]:
       continue
     result.append({k: row[v] if v is not None else None for k, v in ix.items()})
   wb.close()

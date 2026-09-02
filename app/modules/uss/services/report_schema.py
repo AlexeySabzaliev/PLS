@@ -16,13 +16,37 @@ from app.modules.uss.services.tariff_quantity import (
 from app.modules.uss.services.tariff_report import REPORT_ROLES, tariff_in_role_report
 
 TRANSPORT_FIXED_FIELDS = [
-    {"field": "plate_number", "label": "Гос. номер", "input_type": "text"},
+    {"field": "tractor_plate", "label": "Тягач, №", "input_type": "text"},
+    {"field": "trailer_plate", "label": "Прицеп, №", "input_type": "text"},
+    {
+        "field": "operation_type_code",
+        "label": "Операция",
+        "input_type": "select",
+        "choices": [
+            {"value": "inbound", "label": "Приёмка"},
+            {"value": "outbound", "label": "Отгрузка"},
+        ],
+    },
+    {"field": "waybill_number", "label": "Накладная, №", "input_type": "text"},
+    {"field": "mx1_number", "label": "МХ-1, №", "input_type": "text"},
+    {"field": "mx3_number", "label": "МХ-3, №", "input_type": "text"},
+    {"field": "seal_number", "label": "Пломба, №", "input_type": "text"},
+    {"field": "torg2_number", "label": "Торг-2, №", "input_type": "text"},
     {"field": "volume_document_m3", "label": "Объём, м³", "input_type": "number"},
-    {"field": "handling_type_code", "label": "Тип обработки", "input_type": "text"},
+    {
+        "field": "handling_type_code",
+        "label": "Тип обработки",
+        "input_type": "select",
+        "choices": [
+            {"value": "", "label": "—"},
+            {"value": "manual", "label": "Ручной"},
+            {"value": "mechanized", "label": "Механизированный"},
+        ],
+    },
     {"field": "extra_handling_m3", "label": "Доп. обработка, м³", "input_type": "number"},
+    {"field": "registered_at", "label": "Прибытие", "input_type": "time"},
+    {"field": "departed_at", "label": "Убытие", "input_type": "time"},
     {"field": "extra_document_set_qty", "label": "Доп. комплект", "input_type": "number"},
-    {"field": "registered_at", "label": "Прибытие", "input_type": "datetime-local"},
-    {"field": "departed_at", "label": "Убытие", "input_type": "datetime-local"},
 ]
 
 

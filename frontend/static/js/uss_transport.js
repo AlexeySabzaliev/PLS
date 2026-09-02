@@ -58,22 +58,25 @@
         renderVehicles(vehSec, vehicles, c.id, data.warehouse_id, data.operation_date, schema);
         block.appendChild(vehSec);
 
-        const dailyEl = document.createElement('div');
-        dailyEl.className = 'daily-section';
-        block.appendChild(dailyEl);
-        UssApi.renderPeriodForm(dailyEl, schema, totals, async (entries) => {
-          await UssApi.json('/api/uss/transport/daily', {
-            method: 'POST',
-            body: JSON.stringify({
-              warehouse_id: data.warehouse_id,
-              contract_id: c.id,
-              report_date: data.operation_date,
-              entries,
-            }),
+        const periodInputs = schema.period_inputs || [];
+        if (periodInputs.length) {
+          const dailyEl = document.createElement('div');
+          dailyEl.className = 'daily-section';
+          block.appendChild(dailyEl);
+          UssApi.renderPeriodForm(dailyEl, schema, totals, async (entries) => {
+            await UssApi.json('/api/uss/transport/daily', {
+              method: 'POST',
+              body: JSON.stringify({
+                warehouse_id: data.warehouse_id,
+                contract_id: c.id,
+                report_date: data.operation_date,
+                entries,
+              }),
+            });
+            setStatus('Суточные сохранены.');
+            load();
           });
-          setStatus('Суточные сохранены.');
-          load();
-        });
+        }
 
         contentEl.appendChild(block);
       });
@@ -91,8 +94,10 @@
     head.textContent = `ТС (${vehicles.length})`;
     container.appendChild(head);
 
+    const wrap = document.createElement('div');
+    wrap.className = 'table-scroll';
     const table = document.createElement('table');
-    table.className = 'data-table';
+    table.className = 'data-table transport-table';
     const thead = document.createElement('thead');
     const hr = document.createElement('tr');
     fields.forEach((f) => {
@@ -115,7 +120,8 @@
     const tbody = document.createElement('tbody');
     vehicles.forEach((v) => tbody.appendChild(vehicleRow(v, fields, vInputs, warehouseId, opDate)));
     table.appendChild(tbody);
-    container.appendChild(table);
+    wrap.appendChild(table);
+    container.appendChild(wrap);
 
     const addBtn = document.createElement('button');
     addBtn.type = 'button';
@@ -135,16 +141,7 @@
     const rq = vehicle.report_quantities || {};
     fields.forEach((f) => {
       const td = document.createElement('td');
-      const inp = document.createElement('input');
-      inp.name = f.field;
-      if (f.input_type === 'number') inp.type = 'number';
-      else if (f.input_type === 'datetime-local') inp.type = 'datetime-local';
-      else inp.type = 'text';
-      let val = vehicle[f.field];
-      if (f.input_type === 'datetime-local' && val) {
-        val = val.slice(0, 16);
-      }
-      inp.value = val ?? '';
+      const inp = UssApi.renderSchemaField(f, vehicle[f.field]);
       inputs[f.field] = inp;
       td.appendChild(inp);
       tr.appendChild(td);
@@ -172,7 +169,10 @@
         report_quantities: {},
       };
       if (vehicle.id) payload.id = vehicle.id;
-      fields.forEach((f) => { payload[f.field] = inputs[f.field].value || null; });
+      fields.forEach((f) => {
+        const v = inputs[f.field].value;
+        payload[f.field] = v === '' ? null : v;
+      });
       Object.keys(rqInputs).forEach((code) => {
         const v = rqInputs[code].value;
         if (v !== '') payload.report_quantities[code] = Number(v);
