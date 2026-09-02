@@ -3,7 +3,7 @@
 Портал УСС + УЗнТ на `D:\PLS`. Эталон логики: `D:\Billings`; `D:\transport` — только для переноса кода, не целевой репозиторий.
 
 **Последнее обновление:** 2026-09-02  
-**Тесты:** `pytest -v` — 61 passed
+**Тесты:** `pytest -v` — 65 passed
 
 ---
 
@@ -15,7 +15,7 @@
 | 1 | Схема БД, модели | ~75% | PostgreSQL в dev, seed prod |
 | 2 | Операции УСС (транспорт/склад/инвентаризация) | ~80% | period_lock, shift_vehicle validation |
 | 3 | report_schema, справочники, конфигураторы, UI из схемы | ~75% | UI ставок/ДС (catalog-ui) |
-| 4 | Биллинг, сверка Ariston Excel | ~55% | UI расчёта биллинга |
+| 4 | Биллинг, сверка Ariston Excel | ~65% | экспорт Excel, period_lock |
 | 5 | Prod cutover, консолидация, отключение Billings | ~10% | GitHub, миграция данных, deploy |
 
 ---

@@ -36,6 +36,11 @@ def uss_inventory():
     return render_template("uss/inventory.html", user=get_current_user(), active="inventory")
 
 
+@bp.get("/uss/billing")
+def uss_billing():
+    return render_template("uss/billing.html", user=get_current_user(), active="billing")
+
+
 @bp.get("/admin/reference")
 def admin_reference():
     return render_template("admin/reference.html", user=get_current_user())

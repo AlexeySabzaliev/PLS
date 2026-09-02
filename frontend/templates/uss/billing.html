@@ -1,0 +1,13 @@
+{% extends "uss/base.html" %}
+{% block title %}Биллинг{% endblock %}
+{% block content %}
+  <h1 class="page-title">Биллинг ОХ</h1>
+  <p class="muted">Расчёт по договору и периоду — строки из активных ставок ДС, как в отчёте по закупкам УЛ.</p>
+  <p id="status" class="status">Загрузка…</p>
+  <div id="toolbar"></div>
+  <div id="summary" class="billing-summary hidden"></div>
+  <div id="content"></div>
+{% endblock %}
+{% block scripts %}
+  <script src="/static/js/uss_billing.js"></script>
+{% endblock %}
