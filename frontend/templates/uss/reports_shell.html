@@ -1,15 +1,17 @@
-{% extends "uss/base.html" %}
-{% block main_class %}admin-ref{% endblock %}
-{% block content %}
-  <h1 class="page-title">Отчёты УСС</h1>
-  <p class="muted">Аналитические отчёты по операционному учёту и эффективности.</p>
-  <div class="ref-layout">
-    <nav class="ref-nav ref-nav--links" aria-label="Разделы отчётов">
-      <a href="/uss/reports" class="ref-nav-link{% if report_section == 'hub' %} active{% endif %}">Обзор</a>
-      <a href="/uss/reports/fot" class="ref-nav-link{% if report_section == 'fot' %} active{% endif %}">ФОТ vs операционка</a>
-    </nav>
-    <section class="ref-panel">
-      {% block report_content %}{% endblock %}
-    </section>
-  </div>
-{% endblock %}
+{% extends "uss/base.html" %}
+
+{% block main_class %}admin-ref{% endblock %}
+
+{% block content %}
+  <h1 class="page-title">Отчёты</h1>
+  <p class="muted">Биллинг и аналитика по операционному учёту.</p>
+  <div class="ref-layout">
+    <nav class="ref-nav ref-nav--links" aria-label="Разделы отчётов">
+      <a href="/uss/reports/billing" class="ref-nav-link{% if report_section == 'billing' %} active{% endif %}">Биллинг ОХ</a>
+      <a href="/uss/reports/fot" class="ref-nav-link{% if report_section == 'fot' %} active{% endif %}">ФОТ vs операционка</a>
+    </nav>
+    <section class="ref-panel">
+      {% block report_content %}{% endblock %}
+    </section>
+  </div>
+{% endblock %}

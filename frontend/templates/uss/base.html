@@ -1,63 +1,25 @@
-<!DOCTYPE html>
-
-<html lang="ru">
-
-<head>
-
-  <meta charset="UTF-8">
-
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <title>{% block title %}УСС{% endblock %} — ПЛС</title>
-
-  <link rel="stylesheet" href="/static/css/main.css">
-
-</head>
-
-<body class="{% block body_class %}{% endblock %}">
-
-  <header class="pls-header">
-
-    <a href="/" class="pls-logo">ПЛС</a>
-
-    <nav class="pls-nav">
-
-      <span class="pls-nav-label">Ежесменные отчёты</span>
-
-      <a href="/uss/transport" {% if active == 'transport' %}class="active"{% endif %}>Транспортная логистика</a>
-
-      <a href="/uss/warehouse" {% if active == 'warehouse' %}class="active"{% endif %}>Складская логистика</a>
-
-      <a href="/uss/inventory" {% if active == 'inventory' %}class="active"{% endif %}>Управление запасами</a>
-
-      <a href="/uss/billing" {% if active == 'billing' %}class="active"{% endif %}>Биллинг</a>
-
-      <a href="/uss/reports" {% if active == 'reports' %}class="active"{% endif %}>Отчёты</a>
-
-      <a href="/admin/reference">Справочники</a>
-
-    </nav>
-
-    {% if user %}
-
-    {% include 'includes/pls_user_bar.html', header_home_link=true %}
-
-    {% endif %}
-
-  </header>
-
-  <main class="pls-main pls-main--wide {% block main_class %}{% endblock %}">
-
-    {% block content %}{% endblock %}
-
-  </main>
-
-  <script src="/static/js/pls_header.js"></script>
-  <script src="/static/js/uss_common.js"></script>
-
-  {% block scripts %}{% endblock %}
-
-</body>
-
-</html>
-
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="pls-build" content="{{ pls_build }}">
+  <title>{% block title %}УСС{% endblock %} — ПЛС</title>
+  <link rel="stylesheet" href="/static/css/main.css?v={{ pls_build }}">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  <header class="pls-header">
+    {% include 'includes/pls_brand_uss.html' %}
+    {% include 'includes/uss_header_nav.html' %}
+    {% if user %}
+    {% include 'includes/pls_user_bar.html' %}
+    {% endif %}
+  </header>
+  <main class="pls-main pls-main--wide {% block main_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+  <script src="/static/js/pls_header.js?v={{ pls_build }}"></script>
+  <script src="/static/js/uss_common.js?v={{ pls_build }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

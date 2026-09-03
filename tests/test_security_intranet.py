@@ -1,6 +1,18 @@
 """Интеграция с порталом охраны."""
 
 
+def test_demo_security_plate_detection():
+    from app.modules.uss.services.security_intranet import (
+        is_demo_security_plate,
+        is_mock_security_request_id,
+    )
+
+    assert is_demo_security_plate("А000АА03")
+    assert is_demo_security_plate("В111ВВ03")
+    assert not is_demo_security_plate("К582ВЕ147")
+    assert is_mock_security_request_id("mock-ariston-0309-1")
+
+
 def test_sync_security_unauthorized_without_stub(auth_client, client, monkeypatch):
     """Без заглушки и без cookie — не подставлять демо-ТС."""
     import app.modules.uss.services.security_intranet as sec
@@ -21,6 +33,81 @@ def test_sync_security_unauthorized_without_stub(auth_client, client, monkeypatc
     assert data["synced"] == 0
     assert data.get("source", "") in ("no_auth", "unauthorized")
     assert data.get("message")
+
+
+def test_shift_hides_demo_security_vehicles_without_stub(auth_client, client, app, monkeypatch):
+    """Демо-ТС из заглушки не показываются, если SECURITY_PORTAL_STUB выключен."""
+    monkeypatch.delenv("SECURITY_PORTAL_STUB", raising=False)
+    monkeypatch.delenv("SECURITY_USE_MOCK", raising=False)
+
+    with app.app_context():
+        from datetime import date
+
+        from app.db import db
+        from app.modules.uss.models import VehicleOperation
+
+        db.session.add(
+            VehicleOperation(
+                contract_id=1,
+                warehouse_id=1,
+                operation_date=date(2026, 9, 3),
+                tractor_plate="А000АА03",
+                plate_number="А000АА03",
+                operation_type_code="inbound",
+                source="security",
+                security_request_id="mock-test-0309-1",
+            )
+        )
+        db.session.commit()
+
+    auth_client("transport@test.local", "test")
+    resp = client.get("/api/uss/transport/shift?warehouse_id=1&date=2026-09-03")
+    assert resp.status_code == 200
+    plates = [v.get("tractor_plate") for v in resp.json["vehicles"]]
+    assert "А000АА03" not in plates
+
+
+def test_sync_purges_demo_security_vehicles_without_stub(auth_client, client, app, monkeypatch):
+    monkeypatch.delenv("SECURITY_PORTAL_STUB", raising=False)
+    monkeypatch.delenv("SECURITY_USE_MOCK", raising=False)
+    monkeypatch.setenv("SECURITY_AUTO_BROWSER_COOKIES", "0")
+    import app.modules.uss.services.security_intranet as sec
+
+    monkeypatch.setattr(sec, "SECURITY_USE_LOCAL_DB", False)
+    monkeypatch.setattr(sec, "SECURITY_LOCAL_FALLBACK", False)
+    monkeypatch.setattr(sec, "get_authenticated_session", lambda *a, **k: None)
+
+    with app.app_context():
+        from datetime import date
+
+        from app.db import db
+        from app.modules.uss.models import VehicleOperation
+
+        db.session.add(
+            VehicleOperation(
+                contract_id=1,
+                warehouse_id=1,
+                operation_date=date(2026, 9, 3),
+                tractor_plate="В111ВВ03",
+                plate_number="В111ВВ03",
+                operation_type_code="inbound",
+                source="security",
+                security_request_id="mock-test-0309-2",
+            )
+        )
+        db.session.commit()
+
+    auth_client("transport@test.local", "test")
+    resp = client.post(
+        "/api/uss/transport/sync-security",
+        json={"warehouse_id": 1, "date": "2026-09-03"},
+    )
+    assert resp.status_code == 200
+    assert resp.json.get("purged_demo", 0) >= 1
+
+    resp2 = client.get("/api/uss/transport/shift?warehouse_id=1&date=2026-09-03")
+    plates = [v.get("tractor_plate") for v in resp2.json["vehicles"]]
+    assert "В111ВВ03" not in plates
 
 
 def test_sync_security_portal_stub(auth_client, client, monkeypatch):

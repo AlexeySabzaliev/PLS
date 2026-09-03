@@ -201,7 +201,32 @@ def test_client_duplicate_validation(auth_client, client, app):
     assert resp.json.get("error") == "duplicate_client"
 
 
-def test_warehouse_staff_api_crud(auth_client, client, app):
+def test_warehouse_work_hours_update(auth_client, client):
+    auth_client("admin@test.local", "admin")
+    create = client.post(
+        "/api/reference/warehouses",
+        json={
+            "code": "wh_hours",
+            "name": "Тест графика",
+            "work_day_start": "09:00",
+            "work_day_end": "17:30",
+            "is_active": True,
+        },
+    )
+    assert create.status_code == 201
+    wid = create.json["id"]
+    assert create.json["work_day_start"] == "09:00"
+    assert create.json["work_day_end"] == "17:30"
+
+    update = client.put(
+        f"/api/reference/warehouses/{wid}",
+        json={"work_day_end": "18:00"},
+    )
+    assert update.status_code == 200
+    assert update.json["work_day_end"] == "18:00"
+
+
+def test_warehouse_staff_effective_from_persisted(auth_client, client, app):
     auth_client("admin@test.local", "admin")
     with app.app_context():
         wh = Warehouse.query.filter_by(code="strelna").first() or Warehouse(
@@ -226,7 +251,13 @@ def test_warehouse_staff_api_crud(auth_client, client, app):
 
     listing = client.get(f"/api/reference/warehouse-staff?warehouse_id={wh_id}")
     assert listing.status_code == 200
-    assert any(x["id"] == pid for x in listing.json["items"])
+    row = next(x for x in listing.json["items"] if x["id"] == pid)
+    assert row["effective_from"] == "2026-01-01"
+
+    versions = client.get(f"/api/reference/warehouse-staff/{pid}/versions")
+    assert versions.status_code == 200
+    assert len(versions.json["items"]) >= 1
+    assert versions.json["items"][0]["valid_from"] == "2026-01-01"
 
     update = client.put(
         f"/api/reference/warehouse-staff/{pid}",
@@ -234,6 +265,13 @@ def test_warehouse_staff_api_crud(auth_client, client, app):
     )
     assert update.status_code == 200
     assert update.json["monthly_rate"] == 85000
+
+    listing2 = client.get(f"/api/reference/warehouse-staff?warehouse_id={wh_id}")
+    row2 = next(x for x in listing2.json["items"] if x["id"] == pid)
+    assert row2["effective_from"] == "2026-02-01"
+
+    versions2 = client.get(f"/api/reference/warehouse-staff/{pid}/versions")
+    assert len(versions2.json["items"]) >= 2
 
     delete = client.delete(f"/api/reference/warehouse-staff/{pid}")
     assert delete.status_code == 200

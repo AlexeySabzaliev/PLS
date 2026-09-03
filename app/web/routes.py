@@ -1,7 +1,7 @@
 """Веб-страницы портала."""
 from __future__ import annotations
 
-from flask import Blueprint, render_template
+from flask import Blueprint, redirect, render_template, url_for
 
 from app.config import Config
 from app.core.auth import get_current_user
@@ -38,16 +38,21 @@ def uss_inventory():
 
 @bp.get("/uss/billing")
 def uss_billing():
-    return render_template("uss/billing.html", user=get_current_user(), active="billing")
+    return redirect(url_for("web.uss_reports_billing"), code=302)
 
 
 @bp.get("/uss/reports")
 def uss_reports_hub():
+    return redirect(url_for("web.uss_reports_billing"), code=302)
+
+
+@bp.get("/uss/reports/billing")
+def uss_reports_billing():
     return render_template(
-        "uss/reports.html",
+        "uss/billing.html",
         user=get_current_user(),
         active="reports",
-        report_section="hub",
+        report_section="billing",
     )
 
 

@@ -1,8 +1,7 @@
-{% extends "uss/base.html" %}
-{% block title %}Биллинг{% endblock %}
-{% block content %}
-  <h1 class="page-title">Биллинг ОХ</h1>
-  <p class="muted">Расчёт по договору и периоду — строки из активных ставок ДС, как в отчёте по закупкам УЛ.</p>
+{% extends "uss/reports_shell.html" %}
+{% block title %}Биллинг ОХ{% endblock %}
+{% block report_content %}
+  <p class="muted">Расчёт по договору и периоду — строки из активных ставок ДС.</p>
   <p id="status" class="status">Загрузка…</p>
   <div id="toolbar"></div>
   <div id="summary" class="billing-summary hidden"></div>

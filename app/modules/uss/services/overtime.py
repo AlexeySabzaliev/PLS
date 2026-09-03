@@ -1,9 +1,11 @@
-"""Сверхурочная работа: пн–пт 9:00–17:30, иначе — сверхурочно."""
+"""Сверхурочная работа ТС: по факту убытия после конца смены склада или в выходной."""
 from __future__ import annotations
 
 from datetime import date, datetime, time
 
-WORKDAY_END = time(17, 30)
+from app.modules.uss.services.warehouse_schedule import DEFAULT_WORK_DAY_END
+
+WORKDAY_END = DEFAULT_WORK_DAY_END
 
 
 def _parse_time(value) -> time | None:
@@ -34,19 +36,42 @@ def compare_times(a, b) -> int | None:
     return 0
 
 
-def is_overtime_end(op_date: date, end_time) -> bool:
-    """Сверхурочно, если окончание после 17:30 в будни или в выходной."""
+def is_overtime_end(op_date: date, end_time, *, work_day_end: time | None = None) -> bool:
+    """Сверхурочно, если убытие после конца смены в будни или любое убытие в выходной."""
     end = _parse_time(end_time)
     if not end:
         return False
     if op_date.weekday() >= 5:
         return True
-    return end > WORKDAY_END
+    limit = work_day_end or WORKDAY_END
+    return end > limit
 
 
-def transport_is_overtime(op_date: date, departed_at) -> bool:
-    return is_overtime_end(op_date, departed_at)
+def transport_is_overtime(
+    op_date: date,
+    departed_at,
+    *,
+    warehouse_id: int | None = None,
+    work_day_end: time | None = None,
+) -> bool:
+    if work_day_end is None and warehouse_id is not None:
+        from app.modules.uss.services.warehouse_schedule import warehouse_work_day_end
+
+        work_day_end = warehouse_work_day_end(warehouse_id)
+    return is_overtime_end(op_date, departed_at, work_day_end=work_day_end)
 
 
-def row_is_overtime(op_date: date, *, departed_at=None, prr_finished_at=None) -> bool:
-    return transport_is_overtime(op_date, departed_at)
+def row_is_overtime(
+    op_date: date,
+    *,
+    departed_at=None,
+    prr_finished_at=None,
+    warehouse_id: int | None = None,
+    work_day_end: time | None = None,
+) -> bool:
+    return transport_is_overtime(
+        op_date,
+        departed_at,
+        warehouse_id=warehouse_id,
+        work_day_end=work_day_end,
+    )

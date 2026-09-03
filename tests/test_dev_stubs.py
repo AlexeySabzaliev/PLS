@@ -21,10 +21,25 @@ def test_uznt_stub_for_transport(auth_client, client):
 
 def test_uss_reports_hub_admin(auth_client, client):
     auth_client("admin@test.local", "admin")
-    resp = client.get("/uss/reports")
+    resp = client.get("/uss/reports", follow_redirects=True)
     assert resp.status_code == 200
-    assert "отчёты" in resp.get_data(as_text=True).lower()
-    assert "ФОТ" in resp.get_data(as_text=True)
+    html = resp.get_data(as_text=True)
+    assert "Транспортная логистика" in html
+    assert "Справочники" in html
+    assert "ПЛС" in html and "УСС" in html
+    assert "Ежесменные отчёты" not in html
+
+
+def test_uss_home_nav(auth_client, client):
+    auth_client("admin@test.local", "admin")
+    resp = client.get("/uss/")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "pls-brand-sep" in html
+    assert "Отчёты" in html
+    assert "На главную" not in html
+    assert "Ежесменные отчёты" not in html
+    assert "операционного учёта" in html.lower()
 
 
 def test_security_portal_stub_alias(monkeypatch):

@@ -121,6 +121,34 @@ def monthly_fot_total(positions: list[dict]) -> Decimal:
     return total
 
 
+def _open_version(position_id: int) -> WarehouseStaffPositionVersion | None:
+    return (
+        WarehouseStaffPositionVersion.query.filter_by(position_id=position_id, valid_to=None)
+        .order_by(WarehouseStaffPositionVersion.valid_from.desc())
+        .first()
+    )
+
+
+def list_position_versions(position_id: int) -> list[dict]:
+    rows = (
+        WarehouseStaffPositionVersion.query.filter_by(position_id=position_id)
+        .order_by(WarehouseStaffPositionVersion.valid_from.desc(), WarehouseStaffPositionVersion.id.desc())
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "position_id": r.position_id,
+            "name": r.name,
+            "monthly_rate": float(_d(r.monthly_rate)),
+            "headcount": int(r.headcount or 0),
+            "valid_from": r.valid_from.isoformat(),
+            "valid_to": r.valid_to.isoformat() if r.valid_to else None,
+        }
+        for r in rows
+    ]
+
+
 def list_staff_positions(warehouse_id: int, *, active_only: bool = True) -> list[dict]:
     q = WarehouseStaffPosition.query.filter_by(warehouse_id=warehouse_id)
     if active_only:
@@ -130,6 +158,8 @@ def list_staff_positions(warehouse_id: int, *, active_only: bool = True) -> list
     for row in rows:
         rate = _d(row.monthly_rate)
         hc = int(row.headcount or 0)
+        open_v = _open_version(row.id)
+        effective_from = open_v.valid_from.isoformat() if open_v else None
         out.append({
             "id": row.id,
             "warehouse_id": row.warehouse_id,
@@ -139,6 +169,8 @@ def list_staff_positions(warehouse_id: int, *, active_only: bool = True) -> list
             "monthly_total": float(rate * hc),
             "is_active": row.is_active,
             "sort_order": row.sort_order,
+            "effective_from": effective_from,
+            "version_id": open_v.id if open_v else None,
         })
     return out
 

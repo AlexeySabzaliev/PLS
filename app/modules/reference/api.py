@@ -1,7 +1,7 @@
 """CRUD API справочников."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from pathlib import Path
 
 from flask import Blueprint, current_app, g, request
@@ -30,6 +30,7 @@ from app.modules.reference.models import (
 from app.modules.uss.services.staff_positions import (
     create_staff_position,
     deactivate_staff_position,
+    list_position_versions,
     list_staff_positions,
     update_staff_position,
 )
@@ -41,7 +42,10 @@ bp = Blueprint("reference_api", __name__, url_prefix="/api/reference")
 CATALOGS: dict[str, tuple[type, list[str]]] = {
     # security_name не в UI: сопоставление с security.bsh-ru.ru идёт по name (частичное).
     "clients": (Client, ["id", "name", "is_active"]),
-    "warehouses": (Warehouse, ["id", "code", "name", "security_visit_place", "is_active"]),
+    "warehouses": (
+        Warehouse,
+        ["id", "code", "name", "work_day_start", "work_day_end", "security_visit_place", "is_active"],
+    ),
     "product_types": (ProductType, ["id", "code", "name", "is_active"]),
     "contracts": (Contract, ["id", "client_id", "warehouse_id", "product_type_id", "number", "status"]),
     "amendments": (
@@ -79,6 +83,7 @@ SECTION_MAP = {
 }
 
 DATE_FIELDS = frozenset({"effective_from", "effective_to", "valid_from", "valid_to"})
+TIME_FIELDS = frozenset({"work_day_start", "work_day_end"})
 BOOL_FIELDS = frozenset({"is_active", "is_custom", "price_agreed"})
 INT_FIELDS = frozenset({
     "client_id", "warehouse_id", "product_type_id", "contract_id",
@@ -111,6 +116,8 @@ FIELD_LABELS = {
     "name": "Наименование",
     "code": "Код",
     "security_visit_place": "Место визита СБ",
+    "work_day_start": "Начало смены",
+    "work_day_end": "Окончание смены",
     "is_active": "Активен",
     "client_id": "Клиент",
     "warehouse_id": "Склад",
@@ -168,13 +175,20 @@ CATALOG_FIELD_LABELS: dict[str, dict[str, str]] = {
 }
 
 CATALOG_HINTS = {
-    "warehouses": "«Место визита СБ» — фильтр портала охраны для площадки (не поле клиента).",
+    "warehouses": (
+        "График смены (начало/окончание) задаёт автоматический расчёт сверхурочных ТС "
+        "по времени убытия. «Место визита СБ» — фильтр портала охраны."
+    ),
     "product_types": "Неиспользуемые типы можно деактивировать — они не появятся при создании договора.",
     "units": "Неактивные единицы скрыты в новых ставках. «машина» и «м²·день» оставлены в БД для алгоритмов.",
     "vehicle_types": "Для колонки «Тип ТС» в транспортной смене. Габариты: 13,6×2,45×2,70 (д×ш×в, м). Госномера вводятся вручную в смене.",
     "amendments": "Доп. соглашения (ДС) к договору. Загрузите файл Word — система создаст черновик ДС со ставками из таблицы.",
     "tariff_rules": "Основные ставки из ДС, дополнительные — согласованы отдельно (флаг «Доп. ставка»).",
-    "warehouse_staff": "Должности, оклад (₽/мес без НДС) и численность по складу. Используется в отчёте «ФОТ vs операционка».",
+    "warehouse_staff": (
+        "Должности, оклад (₽/мес без НДС) и численность по складу. "
+        "При изменении оклада или численности укажите дату «Действует с» — "
+        "создаётся новая версия для отчёта «ФОТ vs операционка»."
+    ),
 }
 
 STATUS_CHOICES = {
@@ -223,12 +237,37 @@ def _validate_client_name(name: str, *, exclude_id: int | None = None) -> tuple[
     return cleaned, None
 
 
+def _format_time_value(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, time):
+        return value.strftime("%H:%M")
+    text = str(value).strip()
+    if len(text) >= 5 and text[2] == ":":
+        return text[:5]
+    return text or None
+
+
+def _parse_time_field(value) -> time | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, time):
+        return value
+    text = str(value).strip()
+    if len(text) >= 5 and text[2] == ":":
+        parts = text[:5].split(":")
+        return time(int(parts[0]), int(parts[1]))
+    return None
+
+
 def _serialize(model, fields: list[str]) -> dict:
     out = {}
     for f in fields:
         val = getattr(model, f)
         if isinstance(val, date):
             out[f] = val.isoformat()
+        elif isinstance(val, time):
+            out[f] = val.strftime("%H:%M")
         elif val is not None and f in DECIMAL_FIELDS:
             out[f] = float(val)
         else:
@@ -249,6 +288,11 @@ def _coerce_field(name: str, value):
         return float(value)
     if name in DATE_FIELDS:
         return date.fromisoformat(str(value)[:10])
+    if name in TIME_FIELDS:
+        parsed = _parse_time_field(value)
+        if parsed is None:
+            raise ValueError(f"Некорректное время для {name}")
+        return parsed
     return value
 
 
@@ -442,11 +486,13 @@ def _field_meta_for_catalog(catalog: str, fields: list[str]) -> list[dict]:
             "advanced": f in ADVANCED_UI_FIELDS,
             "type": "bool" if f in BOOL_FIELDS else (
                 "date" if f in DATE_FIELDS else (
-                    "select" if f == "status" and catalog in STATUS_CHOICES else (
-                        "select" if f == "billing_line_code" and catalog == "tariff_rules" else (
-                            "select" if f == "report_role" else (
-                                "select" if f == "quantity_source" else (
-                                    "select" if f == "report_scope" else "text"
+                    "time" if f in TIME_FIELDS else (
+                        "select" if f == "status" and catalog in STATUS_CHOICES else (
+                            "select" if f == "billing_line_code" and catalog == "tariff_rules" else (
+                                "select" if f == "report_role" else (
+                                    "select" if f == "quantity_source" else (
+                                        "select" if f == "report_scope" else "text"
+                                    )
                                 )
                             )
                         )
@@ -482,6 +528,8 @@ def catalog_meta():
     for code, (_, fields) in CATALOGS.items():
         if code in HIDDEN_CATALOGS:
             continue
+        if not _check_ref_access(code):
+            continue
         items.append({
             "code": code,
             "label": CATALOG_LABELS.get(code, code),
@@ -493,17 +541,18 @@ def catalog_meta():
             "grouped": code == "tariff_rules",
             "supports_upload": code == "amendments",
         })
-    items.append({
-        "code": "warehouse_staff",
-        "label": CATALOG_LABELS["warehouse_staff"],
-        "hint": CATALOG_HINTS.get("warehouse_staff", ""),
-        "fields": ["warehouse_id", "name", "monthly_rate", "headcount", "sort_order"],
-        "field_meta": [],
-        "read_only": False,
-        "section": SECTION_MAP.get("warehouse_staff"),
-        "grouped": False,
-        "custom_ui": True,
-    })
+    if _check_ref_access("warehouse_staff"):
+        items.append({
+            "code": "warehouse_staff",
+            "label": CATALOG_LABELS["warehouse_staff"],
+            "hint": CATALOG_HINTS.get("warehouse_staff", ""),
+            "fields": ["warehouse_id", "name", "monthly_rate", "headcount", "sort_order"],
+            "field_meta": [],
+            "read_only": False,
+            "section": SECTION_MAP.get("warehouse_staff"),
+            "grouped": False,
+            "custom_ui": True,
+        })
     return {
         "catalogs": items,
         "field_labels": FIELD_LABELS,
@@ -867,6 +916,19 @@ def warehouse_staff_update(item_id: int):
             return {"error": "not_found"}, 404
         return {"error": str(exc), "message": "Проверьте поля позиции"}, 400
     return row
+
+
+@bp.get("/warehouse-staff/<int:item_id>/versions")
+@login_required
+def warehouse_staff_versions(item_id: int):
+    if not _check_ref_access("warehouse_staff"):
+        return {"error": "forbidden"}, 403
+    from app.modules.uss.models import WarehouseStaffPosition
+
+    pos = db.session.get(WarehouseStaffPosition, item_id)
+    if not pos:
+        return {"error": "not_found"}, 404
+    return {"items": list_position_versions(item_id)}
 
 
 @bp.delete("/warehouse-staff/<int:item_id>")

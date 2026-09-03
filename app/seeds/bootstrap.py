@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 from app.core.auth import hash_password
@@ -98,9 +98,21 @@ def seed_reference(*, verbose: bool = False) -> dict:
             row.is_active = active
 
     for code, name in WAREHOUSES:
-        if not Warehouse.query.filter_by(code=code).first():
-            db.session.add(Warehouse(code=code, name=name, is_active=True))
+        row = Warehouse.query.filter_by(code=code).first()
+        if not row:
+            db.session.add(Warehouse(
+                code=code,
+                name=name,
+                is_active=True,
+                work_day_start=time(9, 0),
+                work_day_end=time(17, 30),
+            ))
             stats["warehouses"] += 1
+        elif not frozen:
+            if row.work_day_start is None:
+                row.work_day_start = time(9, 0)
+            if row.work_day_end is None:
+                row.work_day_end = time(17, 30)
 
     role_by_code: dict[str, Role] = {r.code: r for r in Role.query.all()}
     for code, name in ROLE_DEFINITIONS:

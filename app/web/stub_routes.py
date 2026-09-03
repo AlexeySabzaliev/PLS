@@ -122,20 +122,11 @@ def uznt_analytics(user):
 def uss_index(user):
     if not user_has_any_uss_section(user):
         abort(403)
-    links = [
-        {"href": "/uss/transport", "label": "Транспортная логистика", "desc": "Ежесменный отчёт: ТС с портала охраны"},
-        {"href": "/uss/warehouse", "label": "Складская логистика", "desc": "Ежесменный отчёт: операции склада без привязки к ТС"},
-        {"href": "/uss/inventory", "label": "Управление запасами", "desc": "Ежесменный отчёт: площади хранения и доп. работы"},
-        {"href": "/uss/billing", "label": "Биллинг", "desc": "Расчёт и выгрузка биллинга ОХ"},
-    ]
-    if user_has_uss_section(user, "uss_reports"):
-        links.append({"href": "/uss/reports", "label": "Отчёты", "desc": "ФОТ, эффективность и аналитика"})
     return render_template(
         "uss/home.html",
         user=user,
         active="home",
         module_name=Config.MODULE_USS_NAME,
-        links=links,
     )
 
 

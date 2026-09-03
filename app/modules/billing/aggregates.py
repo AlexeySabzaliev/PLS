@@ -8,6 +8,7 @@ from decimal import Decimal
 from app.db import db
 from app.modules.uss.models import OperationDailyTotal, VehicleOperation
 from app.modules.uss.services.overtime import row_is_overtime
+from app.modules.uss.services.warehouse_schedule import warehouse_work_day_end
 
 
 def _d(value) -> Decimal:
@@ -73,8 +74,10 @@ def sum_vehicle_report_quantities(
     return totals
 
 
-def vehicle_operation_to_billing_dict(row: VehicleOperation) -> dict:
+def vehicle_operation_to_billing_dict(row: VehicleOperation, *, work_day_end=None) -> dict:
     """VehicleOperation → формат калькулятора Billings."""
+    if work_day_end is None:
+        work_day_end = warehouse_work_day_end(row.warehouse_id)
     rq = row.report_quantities or {}
     return {
         "operation_date": row.operation_date,
@@ -87,7 +90,11 @@ def vehicle_operation_to_billing_dict(row: VehicleOperation) -> dict:
         "outbound_mech_m3": rq.get("outbound_mech_m3", 0),
         "report_quantities": rq,
         "departed_at": row.departed_at,
-        "is_overtime": row_is_overtime(row.operation_date, departed_at=row.departed_at),
+        "is_overtime": row_is_overtime(
+            row.operation_date,
+            departed_at=row.departed_at,
+            work_day_end=work_day_end,
+        ),
     }
 
 
@@ -107,4 +114,5 @@ def load_vehicle_operations(
         .order_by(VehicleOperation.operation_date, VehicleOperation.id)
         .all()
     )
-    return [vehicle_operation_to_billing_dict(r) for r in rows]
+    work_end = warehouse_work_day_end(warehouse_id)
+    return [vehicle_operation_to_billing_dict(r, work_day_end=work_end) for r in rows]

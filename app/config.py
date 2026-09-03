@@ -47,6 +47,8 @@ class Config:
     APP_SHORT = os.environ.get("APP_SHORT", "ПЛС")
     MODULE_UZNT_NAME = os.environ.get("MODULE_UZNT_NAME", "УЗнТ")
     MODULE_USS_NAME = os.environ.get("MODULE_USS_NAME", "УСС")
+    # Версия статики/HTML — меняйте при правках фронта (сброс кэша браузера)
+    PLS_BUILD_ID = os.environ.get("PLS_BUILD_ID", "20260903f")
 
     SSO_ENABLED = os.getenv("SSO_ENABLED", "false").lower() in ("1", "true", "yes")
     SSO_MODE = os.getenv("SSO_MODE", "headers").lower()

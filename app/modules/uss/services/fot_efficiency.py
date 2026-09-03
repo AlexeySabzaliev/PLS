@@ -174,7 +174,9 @@ def build_fot_report(
     if not staff:
         report["staff_missing"] = True
         report["staff_message"] = (
-            "Справочник штата ФОТ не заполнен для этого склада. "
-            "Операционка рассчитана, ФОТ = 0."
+            "Справочник «Штат ФОТ» не заполнен для этого склада — "
+            "операционка рассчитана, ФОТ = 0. "
+            "Заполните должности, оклады и численность в Справочники → Штат ФОТ "
+            "или импортируйте из Billings: flask pls import-staff-from-billings."
         )
     return report

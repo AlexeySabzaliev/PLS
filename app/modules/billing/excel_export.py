@@ -141,7 +141,11 @@ def _operation_export_dict(op: VehicleOperation) -> dict:
         "waybill_number": op.waybill_number,
         "vehicle_number": _vehicle_plate(op),
         "operation_type_code": op.operation_type_code or "inbound",
-        "is_overtime": row_is_overtime(op.operation_date, departed_at=op.departed_at),
+        "is_overtime": row_is_overtime(
+            op.operation_date,
+            departed_at=op.departed_at,
+            warehouse_id=op.warehouse_id,
+        ),
         "registered_at": op.registered_at,
         "prr_started_at": rq.get("prr_started_at"),
         "prr_finished_at": rq.get("prr_finished_at"),

@@ -64,4 +64,15 @@ def create_app(config_name: str | None = None) -> Flask:
 
     register_cli(app)
 
+    @app.context_processor
+    def _inject_globals():
+        return {"pls_build": app.config.get("PLS_BUILD_ID", "dev")}
+
+    @app.after_request
+    def _no_cache_html(response):
+        if app.config.get("DEBUG") and response.content_type and "text/html" in response.content_type:
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+        return response
+
     return app

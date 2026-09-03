@@ -92,7 +92,8 @@
 
   function renderSummary(r) {
     const staffNote = r.staff_missing
-      ? `<p class="fot-frozen-note muted">${r.staff_message || 'Штат ФОТ не заполнен.'}</p>`
+      ? `<p class="fot-frozen-note muted">${r.staff_message || 'Штат ФОТ не заполнен.'} `
+        + `<a href="/admin/reference?catalog=warehouse_staff">Открыть «Штат ФОТ»</a></p>`
       : '';
     summaryEl.innerHTML = `
       ${staffNote}

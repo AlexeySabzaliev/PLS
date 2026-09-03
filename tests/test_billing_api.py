@@ -4,9 +4,13 @@ from datetime import date
 
 def test_billing_page(auth_client, client):
     auth_client("admin@test.local", "admin")
-    resp = client.get("/uss/billing")
+    resp = client.get("/uss/reports/billing")
     assert resp.status_code == 200
     assert "Биллинг" in resp.get_data(as_text=True)
+
+    legacy = client.get("/uss/billing")
+    assert legacy.status_code == 302
+    assert "/uss/reports/billing" in legacy.headers.get("Location", "")
 
 
 def test_billing_context(auth_client, client):

@@ -1,7 +1,7 @@
 """Справочники: клиенты, договоры, ставки, персонал, ТС."""
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from app.db import db
 
@@ -25,6 +25,8 @@ class Warehouse(db.Model, TimestampMixin):
     code = db.Column(db.String(32), unique=True, nullable=False)
     name = db.Column(db.String(255), nullable=False)
     security_visit_place = db.Column(db.String(64))
+    work_day_start = db.Column(db.Time, nullable=False, default=time(9, 0))
+    work_day_end = db.Column(db.Time, nullable=False, default=time(17, 30))
     is_active = db.Column(db.Boolean, default=True, nullable=False)
 
 

@@ -117,6 +117,6 @@ def test_fot_report_page(auth_client, client):
 
 def test_reports_hub(auth_client, client):
     auth_client("admin@test.local", "admin")
-    resp = client.get("/uss/reports")
+    resp = client.get("/uss/reports", follow_redirects=True)
     assert resp.status_code == 200
-    assert "ФОТ vs операционка" in resp.get_data(as_text=True)
+    assert "Биллинг" in resp.get_data(as_text=True)

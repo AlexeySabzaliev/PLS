@@ -232,6 +232,11 @@
       return `<input type="date" data-field="${f}" value="${esc(val ?? '')}" ${disabled ? 'readonly' : ''}>`;
     }
 
+    if (fm.type === 'time') {
+      const tval = val ? String(val).slice(0, 5) : '';
+      return `<input type="time" data-field="${f}" value="${esc(tval)}" ${disabled ? 'readonly' : ''}>`;
+    }
+
     if (f === 'rate_ex_vat') {
       return `<input type="number" step="0.0001" data-field="${f}" value="${esc(val ?? '')}" ${disabled ? 'readonly' : ''}>`;
     }
@@ -349,6 +354,7 @@
       if (f === 'quantity_source' && val) return esc(QUANTITY_SOURCE_LABELS[val] || val);
     }
     if (fm.type === 'bool') return val ? 'да' : 'нет';
+    if (fm.type === 'time') return esc(val ? String(val).slice(0, 5) : '—');
     if (f === 'is_custom') return val ? 'доп.' : 'основная';
     if (f === 'source_file_path' && val) return '<span class="muted">загружен</span>';
     return esc(val ?? '');
@@ -679,6 +685,10 @@
       return html;
     }
     if (fm.type === 'date') return `<input type="date" name="${f}">`;
+    if (fm.type === 'time') {
+      const defVal = f === 'work_day_start' ? '09:00' : (f === 'work_day_end' ? '17:30' : '');
+      return `<input type="time" name="${f}" value="${defVal}">`;
+    }
     if (f === 'rate_ex_vat') return `<input type="number" step="0.0001" name="${f}">`;
     return `<input type="text" name="${f}">`;
   }
@@ -1196,31 +1206,44 @@
     const whOpts = (lookups.warehouses || []).map((w) => `<option value="${w.id}">${esc(w.label)}</option>`).join('');
 
     panelEl.innerHTML = `
-      <p class="muted">Суммарный ФОТ: <strong>${fmtMoney(fotTotal)}</strong> ₽/мес (текущий)</p>
+      <p class="muted">Суммарный ФОТ: <strong>${fmtMoney(fotTotal)}</strong> ₽/мес (текущие оклады). При смене оклада укажите дату начала действия.</p>
       <table class="data-table ref-table">
         <thead><tr>
           <th>Склад</th><th>Должность</th><th>Оклад, ₽/мес</th><th>Кол-во</th><th>ФОТ, ₽/мес</th>
           <th>Действует с</th><th>Порядок</th><th></th>
         </tr></thead>
         <tbody id="wh-staff-tbody">
-          ${items.length ? items.map((p) => `
-            <tr class="wh-staff-row" data-id="${p.id}">
+          ${items.length ? items.map((p) => {
+            const eff = p.effective_from || todayIso();
+            const snap = encodeURIComponent(JSON.stringify({
+              name: p.name,
+              monthly_rate: Number(p.monthly_rate),
+              headcount: Number(p.headcount),
+            }));
+            return `
+            <tr class="wh-staff-row" data-id="${p.id}" data-snapshot="${snap}">
               <td><span class="catalog-static">${esc(whMap[p.warehouse_id] || p.warehouse_id)}</span></td>
               <td><input data-f="name" value="${esc(p.name)}"></td>
               <td><input data-f="monthly_rate" type="number" min="0" step="0.01" value="${p.monthly_rate}"></td>
               <td><input data-f="headcount" type="number" min="1" step="1" value="${p.headcount}"></td>
               <td class="wh-staff-total">${fmtMoney(p.monthly_total)}</td>
-              <td><input data-f="effective_from" type="date" value="${todayIso()}" title="При изменении оклада или численности"></td>
+              <td><input data-f="effective_from" type="date" value="${esc(eff)}" title="Дата новой версии при изменении оклада или численности"></td>
               <td><input data-f="sort_order" type="number" value="${p.sort_order ?? 100}"></td>
-              <td><button type="button" class="btn btn-danger btn-sm wh-staff-del">Удалить</button></td>
-            </tr>`).join('') : '<tr><td colspan="8" class="muted">Нет позиций</td></tr>'}
+              <td class="wh-staff-actions">
+                <button type="button" class="btn btn-sm wh-staff-history" title="История окладов">История</button>
+                <button type="button" class="btn btn-danger btn-sm wh-staff-del">Удалить</button>
+              </td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="8" class="muted">Нет позиций</td></tr>'}
         </tbody>
       </table>
+      <div id="wh-staff-history" class="wh-staff-history hidden"></div>
       <div class="ref-actions" style="margin-top:0.75rem">
         <button type="button" class="btn" id="wh-staff-add">Добавить позицию</button>
         <button type="button" class="btn btn-primary" id="wh-staff-save">Сохранить</button>
       </div>`;
 
+    const historyEl = document.getElementById('wh-staff-history');
     const tbody = document.getElementById('wh-staff-tbody');
     const recalc = (row) => {
       const rate = Number(row.querySelector('[data-f="monthly_rate"]')?.value || 0);
@@ -1228,9 +1251,42 @@
       const cell = row.querySelector('.wh-staff-total');
       if (cell) cell.textContent = fmtMoney(rate * hc);
     };
+
+    async function showHistory(positionId, title) {
+      const vers = await api(`/api/reference/warehouse-staff/${positionId}/versions`);
+      const rows = (vers.items || []).map((v) => `
+        <tr>
+          <td>${fmtDateShort(v.valid_from)}</td>
+          <td>${v.valid_to ? fmtDateShort(v.valid_to) : '—'}</td>
+          <td>${esc(v.name)}</td>
+          <td>${fmtMoney(v.monthly_rate)}</td>
+          <td>${v.headcount}</td>
+        </tr>`).join('');
+      historyEl.classList.remove('hidden');
+      historyEl.innerHTML = `
+        <h3>История: ${esc(title)}</h3>
+        <table class="data-table ref-table">
+          <thead><tr><th>С</th><th>По</th><th>Должность</th><th>Оклад</th><th>Кол-во</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="5" class="muted">Нет версий</td></tr>'}</tbody>
+        </table>
+        <button type="button" class="btn btn-sm" id="wh-staff-history-close">Закрыть</button>`;
+      document.getElementById('wh-staff-history-close')?.addEventListener('click', () => {
+        historyEl.classList.add('hidden');
+        historyEl.innerHTML = '';
+      });
+    }
+
     panelEl.querySelectorAll('.wh-staff-row').forEach((row) => {
       row.querySelectorAll('[data-f="monthly_rate"], [data-f="headcount"]').forEach((inp) => {
         inp.addEventListener('input', () => recalc(row));
+      });
+      row.querySelector('.wh-staff-history')?.addEventListener('click', async () => {
+        const name = row.querySelector('[data-f="name"]')?.value || '';
+        try {
+          await showHistory(row.dataset.id, name);
+        } catch (e) {
+          setStatus(e.message, true);
+        }
       });
       row.querySelector('.wh-staff-del')?.addEventListener('click', async () => {
         if (!confirm('Удалить позицию?')) return;
@@ -1278,15 +1334,23 @@
         }
         for (const row of panelEl.querySelectorAll('.wh-staff-row:not(.wh-staff-new)')) {
           const get = (f) => row.querySelector(`[data-f="${f}"]`)?.value;
+          let snap = {};
+          try {
+            snap = JSON.parse(decodeURIComponent(row.dataset.snapshot || '%7B%7D'));
+          } catch { /* ignore */ }
+          const name = get('name')?.trim();
+          const monthlyRate = Number(get('monthly_rate'));
+          const headcount = Number(get('headcount'));
+          const payload = { sort_order: get('sort_order') };
+          if (name !== snap.name) payload.name = name;
+          if (monthlyRate !== Number(snap.monthly_rate)) payload.monthly_rate = monthlyRate;
+          if (headcount !== Number(snap.headcount)) payload.headcount = headcount;
+          if (payload.name || payload.monthly_rate != null || payload.headcount != null) {
+            payload.effective_from = get('effective_from');
+          }
           await api(`/api/reference/warehouse-staff/${row.dataset.id}`, {
             method: 'PUT',
-            body: JSON.stringify({
-              name: get('name')?.trim(),
-              monthly_rate: get('monthly_rate'),
-              headcount: get('headcount'),
-              sort_order: get('sort_order'),
-              effective_from: get('effective_from'),
-            }),
+            body: JSON.stringify(payload),
           });
         }
         setStatus('Сохранено');
@@ -1300,13 +1364,23 @@
   function renderNav() {
     navEl.innerHTML = '';
     meta.forEach((c) => {
+      if (!c?.code) return;
+      const label = (c.label || c.code || '').trim();
+      if (!label) return;
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = c.code === current ? 'active' : '';
-      btn.textContent = c.label || c.code;
+      btn.textContent = label;
       btn.addEventListener('click', () => selectCatalog(c.code));
       navEl.appendChild(btn);
     });
+    if (document.body.dataset.admin === '1') {
+      const sso = document.createElement('a');
+      sso.href = '/admin/sso';
+      sso.className = 'ref-nav-item ref-nav-item--admin';
+      sso.textContent = 'Заявки SSO';
+      navEl.appendChild(sso);
+    }
   }
 
   async function loadLookups(force = false) {
@@ -1365,7 +1439,10 @@
         return;
       }
       renderNav();
-      await selectCatalog(meta[0].code);
+      const qs = new URLSearchParams(window.location.search);
+      const initial = qs.get('catalog');
+      const first = (initial && meta.some((c) => c.code === initial)) ? initial : meta[0].code;
+      await selectCatalog(first);
     } catch (e) {
       setStatus(e.message === 'unauthorized' ? 'Войдите через SSO или /api/auth/login' : e.message, true);
     }

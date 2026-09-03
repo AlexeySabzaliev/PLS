@@ -3,21 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SSO — заявки на доступ</title>
-  <link rel="stylesheet" href="/static/css/main.css">
+  <title>Заявки SSO — ПЛС</title>
+  <link rel="stylesheet" href="/static/css/main.css?v=20260903c">
 </head>
 <body>
   <header class="pls-header">
-    <a href="/" class="pls-logo">ПЛС</a>
-    <nav class="pls-nav">
-      <a href="/admin/reference">Справочники</a>
-      <a href="/admin/sso" class="active">SSO заявки</a>
-    </nav>
+    {% include 'includes/pls_brand_uss.html' %}
+    {% set active = 'reference' %}
+    {% include 'includes/uss_header_nav.html' %}
     {% if user %}
     {% include 'includes/pls_user_bar.html' %}
     {% endif %}
   </header>
   <main class="pls-main admin-ref">
+    <p class="muted"><a href="/admin/reference">← Справочники</a></p>
     <h1>Заявки на доступ (SSO)</h1>
     <p class="muted">Пользователь вошёл через SSO, но его нет в БД. Одобрите — будет создана учётка без ролей.</p>
     <p id="status" class="status">Загрузка…</p>

@@ -344,6 +344,60 @@ def _normalize_row(row: dict) -> SecurityVehicleRow | None:
     )
 
 
+_DEMO_PLATE_PREFIXES = ("А000АА", "В111ВВ")
+
+
+def is_mock_security_request_id(request_id: str | None) -> bool:
+    return (request_id or "").strip().lower().startswith("mock-")
+
+
+def is_demo_security_plate(plate: str | None) -> bool:
+    """Госномера из SECURITY_PORTAL_STUB (_mock_rows)."""
+    text = (plate or "").strip()
+    if len(text) != 8:
+        return False
+    return text[:6] in _DEMO_PLATE_PREFIXES and text[6:].isdigit()
+
+
+def is_demo_security_vehicle(
+    *,
+    security_request_id: str | None = None,
+    tractor_plate: str | None = None,
+    plate_number: str | None = None,
+) -> bool:
+    if is_mock_security_request_id(security_request_id):
+        return True
+    if is_demo_security_plate(tractor_plate):
+        return True
+    primary = (plate_number or "").split("/")[0].strip()
+    return is_demo_security_plate(primary)
+
+
+def purge_demo_security_vehicles(warehouse_id: int, day: date) -> int:
+    """Удалить демо-ТС охраны (после отключения SECURITY_PORTAL_STUB)."""
+    from app.db import db
+    from app.modules.uss.models import VehicleOperation
+
+    rows = VehicleOperation.query.filter_by(
+        warehouse_id=warehouse_id,
+        operation_date=day,
+        source="security",
+    ).all()
+    deleted = 0
+    for row in rows:
+        if not is_demo_security_vehicle(
+            security_request_id=row.security_request_id,
+            tractor_plate=row.tractor_plate,
+            plate_number=row.plate_number,
+        ):
+            continue
+        db.session.delete(row)
+        deleted += 1
+    if deleted:
+        db.session.flush()
+    return deleted
+
+
 def _client_slug(client_name: str) -> str:
     """Уникальный slug для mock-заявок (кириллица → хэш, не «client» для всех)."""
     norm = normalize_client_name(canonical_client_name(client_name))
@@ -538,8 +592,8 @@ def fetch_vehicle_requests(
         prefetched, source = _fetch_raw_requests(visit_place, day)
 
     if source in ("mock", "unauthorized", "no_auth") or source.startswith("error"):
-        if _use_mock() or source == "mock":
-            return _mock_rows(client_name, visit_place, day), "stub" if _use_mock() else "mock"
+        if _use_mock():
+            return _mock_rows(client_name, visit_place, day), "stub"
         return [], source
 
     out: list[SecurityVehicleRow] = []

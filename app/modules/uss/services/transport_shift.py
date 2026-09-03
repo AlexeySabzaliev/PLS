@@ -22,6 +22,8 @@ from app.modules.uss.services.security_intranet import (
     _use_mock,
     fetch_all_for_warehouse,
     fetch_vehicle_requests,
+    is_demo_security_vehicle,
+    purge_demo_security_vehicles,
     security_status,
 )
 from app.modules.uss.services.shift_handling import sync_handling_m3_updates
@@ -162,7 +164,11 @@ def _serialize_vehicle(row: VehicleOperation, waybills_map: dict[int, list[dict]
         "extra_document_set_qty": row.extra_document_set_qty,
         "registered_at": _time_to_str(row.registered_at),
         "departed_at": _time_to_str(row.departed_at),
-        "is_overtime": row_is_overtime(row.operation_date, departed_at=row.departed_at),
+        "is_overtime": row_is_overtime(
+            row.operation_date,
+            departed_at=row.departed_at,
+            warehouse_id=row.warehouse_id,
+        ),
         "report_quantities": rq,
     }
 
@@ -196,6 +202,15 @@ def list_transport_shift(user: dict, warehouse_id: int, day: date) -> dict:
             operation_date=day,
         ).order_by(VehicleOperation.id).all()
     )
+    if not _use_mock():
+        vehicles = [
+            v for v in vehicles
+            if not is_demo_security_vehicle(
+                security_request_id=v.security_request_id,
+                tractor_plate=v.tractor_plate,
+                plate_number=v.plate_number,
+            )
+        ]
     wb_map = load_waybills_for_operations([v.id for v in vehicles])
     schemas: dict[str, dict] = {}
     for b in blocks:
@@ -368,6 +383,9 @@ def sync_transport_security(user: dict, warehouse_id: int, day: date) -> dict:
 
     wh = db.session.get(Warehouse, warehouse_id)
     visit_place = wh.security_visit_place if wh else None
+    purged_demo = 0
+    if not _use_mock():
+        purged_demo = purge_demo_security_vehicles(warehouse_id, day)
     prefetched, fetch_source = fetch_all_for_warehouse(visit_place, day)
     sources: set[str] = {fetch_source}
     total = 0
@@ -436,6 +454,10 @@ def sync_transport_security(user: dict, warehouse_id: int, day: date) -> dict:
                 + (f" (например: {sample_txt})" if sample_txt else "")
             )
         for item in rows:
+            if not _use_mock() and (
+                is_demo_security_vehicle(security_request_id=item.request_id, tractor_plate=item.vehicle_number)
+            ):
+                continue
             if item.request_id in assigned_requests:
                 continue
             _upsert_security_vehicle(
@@ -477,6 +499,7 @@ def sync_transport_security(user: dict, warehouse_id: int, day: date) -> dict:
         "synced": total,
         "source": ",".join(sorted(sources)),
         "raw_rows": len(prefetched),
+        "purged_demo": purged_demo,
         "details": details,
         "warnings": warnings,
         "parse_stats": parse_stats,

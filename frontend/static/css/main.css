@@ -24,6 +24,13 @@ body {
   flex-shrink: 0;
 }
 
+.pls-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
 .pls-logo {
   color: #fff;
   font-weight: 700;
@@ -31,27 +38,170 @@ body {
   font-size: 1.1rem;
 }
 
-.pls-nav a {
+.pls-logo:hover {
+  color: #e8f0fa;
+}
+
+.pls-brand-sep {
+  color: #6b8cb8;
+  font-weight: 400;
+  font-size: 1rem;
+  user-select: none;
+}
+
+.pls-module {
+  color: #8fb4e0;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+}
+
+.pls-module:hover,
+.pls-module.active {
+  color: #fff;
+}
+
+.pls-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.pls-nav-link {
   color: #c8d8ec;
   text-decoration: none;
-  margin-right: 1rem;
-  padding: 0.25rem 0;
-}
-
-.pls-nav-label {
-  color: #8fb4e0;
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-right: 0.65rem;
+  padding: 0.2rem 0;
   white-space: nowrap;
+  font-weight: 500;
+  font-size: 0.95rem;
+  border-bottom: 2px solid transparent;
 }
 
-.pls-nav a.active,
-.pls-nav a:hover {
+.pls-nav-link:visited {
+  color: #c8d8ec;
+}
+
+.pls-nav-link.active,
+.pls-nav-link:hover {
   color: #fff;
-  border-bottom: 2px solid #6eb5ff;
+  border-bottom-color: #6eb5ff;
+}
+
+.ref-nav-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 220px;
+}
+
+.ref-nav--admin {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ref-nav--admin .ref-nav-link {
+  font-weight: 600;
+}
+
+.uss-user-panel {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  max-width: 640px;
+}
+
+.uss-user-panel-title {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+}
+
+.uss-user-dl {
+  display: grid;
+  grid-template-columns: 10rem 1fr;
+  gap: 0.5rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.uss-user-dl dt {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.uss-user-dl dd {
+  margin: 0;
+}
+
+.uss-user-hint {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.uss-intro {
+  max-width: 960px;
+}
+
+.uss-intro-lead {
+  font-size: 1.05rem;
+  line-height: 1.55;
+  margin: 0 0 1.5rem;
+  color: #334155;
+}
+
+.uss-intro-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.uss-intro-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.15rem 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.uss-intro-card-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.uss-intro-links {
+  margin: 0.75rem 0 0;
+  padding-left: 1.15rem;
+  line-height: 1.5;
+}
+
+.uss-intro-links a {
+  font-weight: 600;
+}
+
+.uss-intro-foot {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.wh-staff-history {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.wh-staff-history.hidden {
+  display: none;
+}
+
+.wh-staff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 
 .pls-user {
@@ -225,12 +375,6 @@ body {
 .ref-nav--links .ref-nav-link:hover {
   border-color: #1e3a5f;
   background: #eef4fb;
-}
-  background: #fff;
-  border-radius: 10px;
-  padding: 1.5rem 1.75rem;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  max-width: 640px;
 }
 
 .pls-stub-badge {
@@ -519,19 +663,33 @@ nav a { margin-right: 1rem; }
   overflow-y: auto;
 }
 
-.ref-nav button {
+.ref-nav button,
+.ref-nav .ref-nav-item {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   text-align: left;
   padding: 0.5rem 0.75rem;
   border: 1px solid #d0d7de;
   background: #fff;
   border-radius: 6px;
   cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-decoration: none;
 }
 
 .ref-nav button.active,
-.ref-nav button:hover {
+.ref-nav button:hover,
+.ref-nav .ref-nav-item:hover {
   border-color: #1e3a5f;
   background: #eef4fb;
+}
+
+.ref-nav .ref-nav-item--admin {
+  margin-top: 0.5rem;
+  border-style: dashed;
+  font-weight: 600;
 }
 
 .ref-panel {
