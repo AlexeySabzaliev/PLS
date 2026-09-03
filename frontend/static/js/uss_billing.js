@@ -12,6 +12,8 @@
   const qtyFmt = new Intl.NumberFormat('ru-RU', {
     maximumFractionDigits: 3,
   });
+  let isAdmin = false;
+  let currentPeriod = null;
   const UNIT_LABELS = {
     m2: 'м²',
     m3: 'м³',
@@ -38,10 +40,51 @@
   function defaultMonth() {
     const q = UssApi.qs().get('month');
     if (q) return q;
-    return new Date().toISOString().slice(0, 7);
+    const n = new Date();
+    const y = n.getFullYear();
+    const m = String(n.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
   }
 
-  function renderToolbar({ warehouses, warehouseId, month, contracts, contractId, onChange, onCalculate }) {
+  function renderPeriodBadge(host) {
+    const existing = host.querySelector('.billing-period-badge');
+    if (existing) existing.remove();
+    if (!currentPeriod) return;
+    const badge = document.createElement('div');
+    badge.className = `billing-period-badge${currentPeriod.locked ? ' locked' : ''}`;
+    badge.textContent = `Статус периода: ${currentPeriod.label || currentPeriod.status}`;
+    host.appendChild(badge);
+  }
+
+  async function fetchPeriod(contractId, month) {
+    const [year, m] = month.split('-').map(Number);
+    currentPeriod = await UssApi.json(
+      `/api/billing/period?contract_id=${contractId}&year=${year}&month=${m}`,
+    );
+    return currentPeriod;
+  }
+
+  async function lockPeriod(contractId, month, totalExVat) {
+    const [year, m] = month.split('-').map(Number);
+    const body = { contract_id: Number(contractId), year, month };
+    if (totalExVat != null) body.total_ex_vat = totalExVat;
+    const res = await UssApi.json('/api/billing/period/lock', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    currentPeriod = res.period;
+  }
+
+  async function unlockPeriod(contractId, month) {
+    const [year, m] = month.split('-').map(Number);
+    const res = await UssApi.json('/api/billing/period/unlock', {
+      method: 'POST',
+      body: JSON.stringify({ contract_id: Number(contractId), year, month: m }),
+    });
+    currentPeriod = res.period;
+  }
+
+  function renderToolbar({ warehouses, warehouseId, month, contracts, contractId, onChange, onCalculate, onLock, onUnlock }) {
     toolbarEl.innerHTML = '';
     const wrap = document.createElement('div');
     wrap.className = 'toolbar billing-toolbar';
@@ -87,6 +130,26 @@
       contract_id: contractSel.value,
     }));
 
+    const lockBtn = document.createElement('button');
+    lockBtn.type = 'button';
+    lockBtn.textContent = 'Закрыть период';
+    lockBtn.title = 'Блокировка правок в сменах и пересчёта';
+    lockBtn.addEventListener('click', () => onLock({
+      warehouse_id: whSel.value,
+      month: monthInp.value,
+      contract_id: contractSel.value,
+    }));
+
+    const unlockBtn = document.createElement('button');
+    unlockBtn.type = 'button';
+    unlockBtn.textContent = 'Открыть период';
+    unlockBtn.className = 'btn-secondary';
+    unlockBtn.addEventListener('click', () => onUnlock({
+      warehouse_id: whSel.value,
+      month: monthInp.value,
+      contract_id: contractSel.value,
+    }));
+
     const reloadBtn = document.createElement('button');
     reloadBtn.type = 'button';
     reloadBtn.textContent = 'Обновить';
@@ -96,8 +159,22 @@
       contract_id: contractSel.value,
     }));
 
-    wrap.append(whLabel, monthLabel, contractLabel, reloadBtn, calcBtn);
+    const exportBtn = document.createElement('button');
+    exportBtn.type = 'button';
+    exportBtn.className = 'btn-secondary';
+    exportBtn.textContent = 'Экспорт Excel';
+    exportBtn.title = 'Скачать расчёт в формате для согласования с клиентом';
+    exportBtn.addEventListener('click', () => {
+      const [y, m] = monthInp.value.split('-').map(Number);
+      if (!contractSel.value || !y || !m) return;
+      const url = `/api/billing/export?contract_id=${contractSel.value}&year=${y}&month=${m}`;
+      window.location.href = url;
+    });
+
+    wrap.append(whLabel, monthLabel, contractLabel, reloadBtn, calcBtn, exportBtn, lockBtn);
+    if (isAdmin) wrap.appendChild(unlockBtn);
     toolbarEl.appendChild(wrap);
+    renderPeriodBadge(toolbarEl);
   }
 
   function renderSummary(result) {
@@ -202,13 +279,15 @@
         }),
       });
       if (result.status !== 'ok') {
-        setStatus(result.message || 'Ошибка расчёта', true);
+        setStatus(UssApi.formatError(result, 'Ошибка расчёта'), true);
         renderSummary(null);
         contentEl.innerHTML = '';
         return;
       }
       renderSummary(result);
       renderLines(result.lines);
+      if (result.period) currentPeriod = result.period;
+      renderPeriodBadge(toolbarEl);
       setStatus(`Расчёт выполнен: ${result.lines.length} строк.`);
     } catch (e) {
       setStatus(e.message, true);
@@ -226,13 +305,18 @@
       const ctx = await UssApi.json(
         `/api/billing/context${warehouseId ? `?warehouse_id=${warehouseId}` : ''}`,
       );
+      isAdmin = Boolean(ctx.is_admin);
       warehouseId = String(ctx.warehouse_id);
       if (!contractId && ctx.contracts?.length) {
         contractId = String(ctx.contracts[0].id);
       }
       UssApi.setQs({ warehouse_id: warehouseId, month, contract_id: contractId || '' });
 
-      renderToolbar({
+      if (contractId) {
+        await fetchPeriod(contractId, month);
+      }
+
+      const renderToolbarFn = () => renderToolbar({
         warehouses: ctx.warehouses,
         warehouseId,
         month,
@@ -243,7 +327,26 @@
           UssApi.setQs(p);
           calculate(p.contract_id, p.month);
         },
+        onLock: async (p) => {
+          try {
+            await lockPeriod(p.contract_id, p.month);
+            setStatus('Период закрыт для правок.');
+            renderPeriodBadge(toolbarEl);
+          } catch (e) {
+            setStatus(e.message, true);
+          }
+        },
+        onUnlock: async (p) => {
+          try {
+            await unlockPeriod(p.contract_id, p.month);
+            setStatus('Период открыт.');
+            renderPeriodBadge(toolbarEl);
+          } catch (e) {
+            setStatus(e.message, true);
+          }
+        },
       });
+      renderToolbarFn();
 
       if (!ctx.contracts?.length) {
         setStatus('Нет активных договоров ОХ на складе.');
@@ -254,7 +357,9 @@
       setStatus('Выберите период и нажмите «Рассчитать».');
     } catch (e) {
       setStatus(
-        e.message === 'unauthorized' ? 'Войдите через SSO или /api/auth/login' : e.message,
+        e.message === 'unauthorized'
+          ? UssApi.ERROR_MESSAGES.unauthorized
+          : e.message,
         true,
       );
     }

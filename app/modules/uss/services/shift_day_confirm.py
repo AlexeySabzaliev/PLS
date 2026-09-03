@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from app.db import db
+from app.modules.billing.period_lock import PeriodLockedError, assert_warehouse_date_editable
 from app.modules.processes.templates import REPORT_ROLES
 from app.modules.uss.models import ShiftDayConfirmation
 
@@ -31,6 +32,10 @@ def confirm_day(user: dict, warehouse_id: int, report_date: date, report_role: s
     wh_ids = user.get("warehouse_ids") or []
     if warehouse_id not in wh_ids and not user.get("is_admin"):
         return {"error": "forbidden"}
+    try:
+        assert_warehouse_date_editable(user, warehouse_id, report_date)
+    except PeriodLockedError as exc:
+        return {"error": "period_locked", "message": str(exc)}
     row = ShiftDayConfirmation.query.filter_by(
         warehouse_id=warehouse_id,
         report_date=report_date,

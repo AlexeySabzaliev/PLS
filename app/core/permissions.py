@@ -22,24 +22,24 @@ USS_SECTIONS: dict[str, frozenset[str]] = {
     "admin": frozenset({
         "uss_admin", "uss_catalog_clients", "uss_catalog_contracts",
         "uss_catalog_amendments", "uss_catalog_locations", "uss_catalog_rates",
-        "uss_catalog_staff", "uss_catalog_vehicles", "uss_catalog_vehicle_types", "uss_ops_transport",
+        "uss_catalog_staff", "uss_catalog_vehicle_types", "uss_ops_transport",
         "uss_ops_warehouse", "uss_ops_inventory", "uss_billing",
-        "uss_process_lines",
+        "uss_process_lines", "uss_reports",
     }),
     "supervisor": frozenset({"uss_admin", "uss_catalog_locations", "uss_process_lines"}),
-    "transport_logistics": frozenset({"uss_ops_transport", "uss_catalog_vehicles", "uss_catalog_vehicle_types"}),
+    "transport_logistics": frozenset({"uss_ops_transport", "uss_catalog_vehicle_types"}),
     "warehouse_logistics": frozenset({"uss_ops_warehouse"}),
     "inventory_management": frozenset({"uss_ops_inventory"}),
     "commercial_logistics": frozenset({
         "uss_catalog_clients", "uss_catalog_contracts", "uss_catalog_amendments",
-        "uss_catalog_rates", "uss_billing", "uss_process_lines",
+        "uss_catalog_rates", "uss_billing", "uss_process_lines", "uss_reports",
     }),
 }
 
 # Справочники (общие)
 REFERENCE_SECTIONS: dict[str, frozenset[str]] = {
     "admin": frozenset({"ref_clients", "ref_contracts", "ref_amendments", "ref_locations",
-                         "ref_tariff_codes", "ref_units", "ref_staff", "ref_vehicles",
+                         "ref_tariff_codes", "ref_units", "ref_staff", "ref_vehicle_types",
                          "ref_roles", "ref_permissions"}),
     "commercial_logistics": frozenset({
         "ref_clients", "ref_contracts", "ref_amendments", "ref_tariff_codes",
@@ -84,3 +84,25 @@ def user_has_request_section(user: dict | None, section: str) -> bool:
 
 def user_has_reference_section(user: dict | None, section: str) -> bool:
     return _has_section(user, section, REFERENCE_SECTIONS)
+
+
+def user_has_any_request_section(user: dict | None) -> bool:
+    if not user:
+        return False
+    if user.get("is_admin"):
+        return True
+    for code in effective_role_codes(user):
+        if REQUEST_SECTIONS.get(code):
+            return True
+    return False
+
+
+def user_has_any_uss_section(user: dict | None) -> bool:
+    if not user:
+        return False
+    if user.get("is_admin"):
+        return True
+    for code in effective_role_codes(user):
+        if USS_SECTIONS.get(code):
+            return True
+    return False

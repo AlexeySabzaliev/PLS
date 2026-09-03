@@ -43,3 +43,7 @@ Billings (`oub`) открывайте отдельным окном Cursor, то
 ## Если Run на командах всё ещё есть
 
 Значит UI всё ещё не в **Run Everything**. JSON `enableRunEverything` этого не делает — только переключатель в Settings.
+
+## Резервное копирование (prod)
+
+См. [BACKUP.md](./BACKUP.md): `flask pls backup`, `scripts/backup_pls.ps1`, `PLS_BACKUP_DIR`, `PLS_BACKUP_RETENTION`.

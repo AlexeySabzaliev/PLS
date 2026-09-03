@@ -7,7 +7,7 @@ from decimal import Decimal
 from app.db import db
 from app.modules.billing.aggregates import load_vehicle_operations
 from app.modules.billing.storage_strategy import StorageBillingStrategy, billing_line_to_dict
-from app.modules.billing.tariffs import tariffs_for_billing_period
+from app.modules.billing.tariffs import diagnose_tariffs_for_billing_period, tariffs_for_billing_period
 from app.modules.reference.models import Contract, ProductType
 from app.modules.uss.models import ShiftReport
 
@@ -66,7 +66,7 @@ class BillingCalculator:
     ) -> dict:
         contract = load_contract_dict(contract_id)
         if not contract:
-            return {"status": "error", "message": "contract_not_found"}
+            return {"status": "error", "message": "Договор не найден", "error": "contract_not_found"}
 
         year, month = _month_bounds(period_from, period_to)
         period_start = date(year, month, 1)
@@ -78,6 +78,16 @@ class BillingCalculator:
             period_end = period_end - timedelta(days=1)
 
         tariffs = tariffs_for_billing_period(contract_id, period_start, period_end)
+        if not tariffs:
+            diag = diagnose_tariffs_for_billing_period(contract_id, period_start, period_end)
+            return {
+                "status": "error",
+                "message": diag["message"] if diag else (
+                    "Нет активных ставок за период — добавьте ДС со ставками "
+                    "или проверьте даты действия."
+                ),
+                "error": diag["error"] if diag else "no_tariffs",
+            }
         operations = load_vehicle_operations(
             contract_id, contract["warehouse_id"], period_start, period_end,
         )

@@ -1,0 +1,14 @@
+{% extends "uss/base.html" %}
+{% block title %}УСС — главная{% endblock %}
+{% block content %}
+  <h1 class="page-title">{{ module_name }}</h1>
+  <p class="muted">Операционный учёт и биллинг ответственного хранения. Выберите раздел.</p>
+  <div class="pls-hub-grid pls-hub-grid--uss">
+    {% for link in links %}
+    <a class="pls-hub-card" href="{{ link.href }}">
+      <h2>{{ link.label }}</h2>
+      <p>{{ link.desc }}</p>
+    </a>
+    {% endfor %}
+  </div>
+{% endblock %}

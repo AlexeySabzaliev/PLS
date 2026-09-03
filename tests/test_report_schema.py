@@ -83,3 +83,110 @@ def test_shift_context(auth_client, client):
     assert data["warehouse_id"] == 1
     assert len(data["warehouses"]) >= 1
     assert len(data["contracts"]) >= 1
+
+
+def test_transport_schema_includes_manual_daily_and_vehicle(app):
+    from datetime import date
+
+    from app.db import db
+    from app.modules.reference.models import Contract, ContractAmendment, TariffRule, UnitOfMeasure
+    from app.modules.uss.services.report_schema import schema_for_contract_role
+
+    with app.app_context():
+        contract = Contract.query.first()
+        am = ContractAmendment.query.filter_by(contract_id=contract.id, status="active").first()
+        unit = UnitOfMeasure.query.filter_by(code="pcs").first()
+        db.session.add(
+            TariffRule(
+                contract_id=contract.id,
+                amendment_id=am.id,
+                billing_line_code="custom_podklejka",
+                name="Подклейка клапанов тест",
+                unit_id=unit.id,
+                report_role="transport_logistics",
+                report_scope="period",
+                quantity_source="manual_daily",
+                is_custom=True,
+                valid_from=date(2025, 1, 1),
+            )
+        )
+        elco = TariffRule.query.filter_by(
+            contract_id=contract.id, billing_line_code="elco_passports",
+        ).first()
+        if elco:
+            elco.report_role = "transport_logistics"
+            elco.report_scope = "vehicle"
+            elco.quantity_source = "manual_daily"
+        db.session.commit()
+
+        sch = schema_for_contract_role(contract.id, date(2026, 9, 2), "transport_logistics")
+        period_codes = {x["billing_line_code"] for x in sch["period_inputs"]}
+        vehicle_codes = {x["billing_line_code"] for x in sch["vehicle_inputs"]}
+        fixed_tariff_codes = {
+            f["billing_line_code"] for f in sch["vehicle_fixed_fields"] if f.get("tariff_input")
+        }
+        assert "custom_podklejka" in period_codes
+        if elco:
+            assert "elco_passports" in vehicle_codes
+            assert "elco_passports" in fixed_tariff_codes
+
+
+def test_transport_extra_handling_field_requires_tariff(app):
+    from datetime import date
+
+    from app.db import db
+    from app.modules.reference.models import Contract, ContractAmendment, TariffRule, UnitOfMeasure
+    from app.modules.uss.services.report_schema import schema_for_contract_role
+
+    with app.app_context():
+        contract = Contract.query.first()
+        am = ContractAmendment.query.filter_by(contract_id=contract.id, status="active").first()
+        unit = UnitOfMeasure.query.filter_by(code="m3").first()
+        sch = schema_for_contract_role(contract.id, date(2026, 9, 3), "transport_logistics")
+        fields = [f["field"] for f in sch["vehicle_fixed_fields"]]
+        assert "extra_handling_m3" not in fields
+
+        db.session.add(
+            TariffRule(
+                contract_id=contract.id,
+                amendment_id=am.id,
+                billing_line_code="extra_manual_m3",
+                name="Доп. ручная обработка",
+                unit_id=unit.id if unit else None,
+                report_role="transport_logistics",
+                report_scope="vehicle",
+                quantity_source="auto_vehicle",
+                valid_from=date(2025, 1, 1),
+            )
+        )
+        db.session.commit()
+
+        sch2 = schema_for_contract_role(contract.id, date(2026, 9, 3), "transport_logistics")
+        fields2 = [f["field"] for f in sch2["vehicle_fixed_fields"]]
+        assert "extra_handling_m3" in fields2
+        handling_idx = fields2.index("handling_type_code")
+        extra_idx = fields2.index("extra_handling_m3")
+        assert handling_idx < extra_idx
+
+
+def test_inventory_schema_with_wrong_repack_quantity_source(app):
+    from datetime import date
+
+    from app.db import db
+    from app.modules.reference.models import Contract, TariffRule
+    from app.modules.uss.services.report_schema import schema_for_contract_role
+
+    with app.app_context():
+        contract = Contract.query.first()
+        repack = TariffRule.query.filter_by(
+            contract_id=contract.id, billing_line_code="repack_units",
+        ).first()
+        assert repack is not None
+        repack.quantity_source = "manual_daily"
+        db.session.commit()
+
+        sch = schema_for_contract_role(contract.id, date(2026, 9, 2), "inventory_management")
+        extra_codes = {x["billing_line_code"] for x in sch["inventory_extra"]}
+        area_codes = {x["billing_line_code"] for x in sch["inventory_areas"]}
+        assert "repack_units" in extra_codes
+        assert "repack_units" in extra_codes | area_codes

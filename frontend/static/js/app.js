@@ -46,7 +46,6 @@ async function plsTrySso(errEl) {
 
 document.addEventListener('DOMContentLoaded', () => {
   const form = document.getElementById('login-form');
-  const logoutBtn = document.getElementById('logout-btn');
   const errEl = document.getElementById('login-error');
 
   if (form) {
@@ -64,9 +63,5 @@ document.addEventListener('DOMContentLoaded', () => {
           : err.message;
       }
     });
-  }
-
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', () => plsLogout().catch(() => {}));
   }
 });

@@ -1,0 +1,26 @@
+{% extends "uss/reports_shell.html" %}
+{% block title %}ФОТ vs операционка{% endblock %}
+{% block report_content %}
+  <h2>ФОТ vs операционка</h2>
+  <p class="muted">Сравнение операционной выручки (без хранения на площадях) с дневным ФОТ склада. Цель — Δ ≥ 0.</p>
+  <p id="status" class="status">Загрузка…</p>
+  <div id="toolbar" class="fot-report-toolbar"></div>
+  <div id="summary"></div>
+  <div id="weekly"></div>
+  <table class="data-table" id="daily-table">
+    <thead>
+      <tr>
+        <th>Дата</th>
+        <th>Операционка, ₽</th>
+        <th>ФОТ (день), ₽</th>
+        <th>Δ день</th>
+        <th>Δ накоп.</th>
+        <th>Цель</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+{% endblock %}
+{% block scripts %}
+  <script src="/static/js/uss_fot.js"></script>
+{% endblock %}

@@ -1,85 +1,79 @@
 ﻿# Статус реализации PLS
 
-Портал УСС + УЗнТ на `D:\PLS`. Эталон логики: `D:\Billings`; `D:\transport` — только для переноса кода, не целевой репозиторий.
+Портал УСС + УЗнТ на `D:\PLS`. Эталон логики: `D:\Billings`.
 
 **Последнее обновление:** 2026-09-02  
-**Тесты:** `pytest -v` — 65 passed
+**Тесты:** `pytest -q` — **155 passed**
+
+---
+
+## Миграция ОУБ из Billings (2026-09-02)
+
+### Выполнено
+
+| Область | Статус |
+|---------|--------|
+| Справочники (API + `reference-ui.js`) | Импорт insert-only, `PLS_FREEZE_REFERENCE=1`, seed не перезаписывает |
+| Биллинг (`calculator`, `storage_strategy`, `tariffs`) | Порт с Billings, Ariston-тесты |
+| Смены склад / инвентаризация | `warehouse_shift`, `inventory_shift`, schema-driven UI |
+| **Транспорт** | `transport_shift`, `transport_waybills`, `operation_daily_totals`, `uss_transport.js` |
+| `report_schema`, `tariff_*`, `tariff_quantity` | Портированы |
+| ФОТ (`fot_efficiency`, staff positions) | Портированы |
+| Импорт данных | `flask pls import-from-billings --only=all` — insert-only (`vehicle_operations`, `operation_daily_totals`) |
+| ДС-6/2024, ДС-5 | Импортированы из Billings (активные) |
+| **Портал охраны** | `security_intranet.py`: разбор ТС (vehicle_plates), фильтр клиента/склада, stub/Negotiate/local DB |
+| Синх «С охраны» | `POST /api/uss/transport/sync-security`, тесты E2E после OUB-подобных данных |
+
+### Транспорт (паритет Billings)
+
+- `transport_shift.py` — CRUD ТС, суточные допы, синх с охраной, period lock, `report_schema`
+- `overtime.py` — флаг `is_overtime` по `departed_at` (пн–пт после 17:30, выходные)
+- `uss_transport.js` — колонки из schema, кнопка «С охраны», бейдж security-строк
+- `import-from-billings --only=shifts` — `vehicle_operations` + `operation_daily_totals`
+- Тесты: `test_transport_shift`, `test_transport_waybills`, `test_security_intranet`, `test_overtime`
+
+### Защита от перезаписи справочников
+
+- `PLS_FREEZE_REFERENCE=1` в `.env`
+- `seed_reference()` / `seed_demo()` пропускают изменения при freeze
+- `fix-ariston-canonical` блокируется без `--force`
+- `import-from-billings` — insert-only (`skip_existing=True` по умолчанию)
+
+### Security (охрана)
+
+- Парсинг госномеров: `vehicle_plates.py` (с/п, п/п, слэш, иностранные)
+- `visitReason` **не** используется как номер (только `vehicleNumber` / `vehiclePlate`)
+- `SECURITY_PORTAL_STUB=1` — демо-заявки для dev/E2E
+- `SECURITY_USE_LOCAL_DB=1` — чтение из `security_admission_form` (если таблица есть)
+- Тесты: `test_security_vehicle_plates`, `test_security_intranet`, sync после OUB-клиента
+
+### Не перенесено (намеренно / позже)
+
+- `LeaseBillingStrategy` — аренда/субаренда (только ОХ в prod)
+- Расширенный `inventory_shift` Billings (dedupe_extra_entries, setup_status) — упрощённая модель PLS
+
+### Добавлено (2026-09-02, вечер)
+
+- `excel_export.py` — `GET /api/billing/export?contract_id=&year=&month=`, кнопка «Экспорт Excel» в `/uss/billing`
+- `amendments_overview.py` — `GET /api/reference/amendments-overview`, блок обзора на вкладке «Доп. соглашения»
 
 ---
 
 ## Сводка по фазам
 
-| Фаза | Описание | Готовность | Следующий шаг |
-|------|----------|------------|---------------|
-| 0 | Auth/SSO, роли, оболочка портала | ~80% | Проверка SSO на IIS (файлы с prod) |
-| 1 | Схема БД, модели | ~75% | PostgreSQL в dev, seed prod |
-| 2 | Операции УСС (транспорт/склад/инвентаризация) | ~80% | period_lock, shift_vehicle validation |
-| 3 | report_schema, справочники, конфигураторы, UI из схемы | ~75% | UI ставок/ДС (catalog-ui) |
-| 4 | Биллинг, сверка Ariston Excel | ~65% | экспорт Excel, period_lock |
-| 5 | Prod cutover, консолидация, отключение Billings | ~10% | GitHub, миграция данных, deploy |
-
----
-
-## Фаза 0 — Auth/SSO, роли, portal shell
-
-**Сделано:** Flask factory, config, `.env.example`; Windows SSO (headers / windows / oidc), dev bypass; сессия, `POST /api/auth/login`, матрица permissions; главная с навигацией УСС и справочников.
-
-**Осталось:** полноценная оболочка портала (navbar, роли в UI); страницы-заглушки УЗнТ; OIDC end-to-end при необходимости; проверка SSO в production.
-
----
-
-## Фаза 1 — DB schema, models
-
-**Сделано:** SQLAlchemy-модели; **миграция `001_initial`** (все таблицы, индексы, unique); `flask pls init-db`, `seed-reference`, `seed-admin`, `seed-demo`; `docker-compose.yml` (PostgreSQL 16).
-
-**Осталось:** seed для prod-окружения; при импорте данных — паритет с миграциями Billings.
-
----
-
-## Фаза 2 — USS operations
-
-**Сделано:** `transport_shift` (list/save, daily totals); `warehouse_shift` + `operation_daily_totals`; `shift_day_confirm` + API; `inventory_shift` (shift_reports, schema-driven UI); `/api/uss/*`; UI смен transport / warehouse / inventory из `report_schema`.
-
-**Осталось:** полное редактирование транспортных строк (сейчас в основном read-only); `period_lock`, overtime, security; `transport_waybills`, `shift_vehicle`, `vehicle_plates`.
-
----
-
-## Фаза 3 — report_schema, configurators, UI
-
-**Сделано:** `BASE_PROCESS_TEMPLATES`, `resolve_process_schema`, merge + tariffs; API `/api/process-lines`, `GET …/schema`; CRUD справочников (list/create/update/delete); пресеты `ariston_standard`, `gazprom_logistics`; **admin UI** `reference-ui.js`; порт `tariff_codes`, `tariff_quantity`, `tariff_report`, `tariff_report_lines`, `report_schema`.
-
-**Осталось:** расширенный UI ставок/ДС (как `catalog-ui.js` в Billings); `accounting_mode` в модели/миграции; `contract_parameters` для биллинга.
-
----
-
-## Фаза 4 — Billing
-
-**Сделано:** stub `BillingCalculator`, `POST /api/billing/calculate`; README для fixtures Ariston.
-
-**Осталось:** порт `billing/calculator.py`, `tariffs.py`, `excel_export.py`; fixtures и `test_ariston_billing_ref.py`; `verify_billing_cycle.py`, reconciliation; связка billing ↔ tariff rules process_line.
-
----
-
-## Фаза 5 — Cutover
-
-**Сделано:** локальный git-репозиторий, документация в `docs/`.
-
-**Осталось:** публикация на GitHub; миграция prod-данных Billings → PLS PostgreSQL; deploy (IIS/SSO, `DATABASE_URL`); переключение пользователей; модуль УЗнТ из transport или отдельный трек.
-
----
-
-## Приоритеты (кратко)
-
-1. **P0:** GitHub push (`gh auth login`).
-2. **P1:** ~~Alembic, seed, PostgreSQL~~ — сделано; проверить prod deploy.
-3. **P2:** ~~Schema-driven UI УСС; порт report_schema / tariff_*~~ — сделано.
-4. **P3:** Billing + Ariston tests.
-5. **P4:** УЗнТ и prod cutover.
+| Фаза | Описание | Готовность |
+|------|----------|------------|
+| 0 | Auth/SSO, роли, оболочка | ~80% |
+| 1 | Схема БД, миграции, backup/restore | ~90% |
+| 2 | Операции УСС (склад/инвентаризация/транспорт+охрана) | ~95% |
+| 3 | report_schema, справочники, UI | ~90% |
+| 4 | Биллинг, сверка Ariston | ~85% |
+| 5 | Prod cutover | ~30% (данные импортированы) |
 
 ---
 
 ## Ссылки
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md)
-- [PROCESS_CONFIGURATORS.md](./PROCESS_CONFIGURATORS.md)
 - [BILLING_DATA_ROLES.md](./BILLING_DATA_ROLES.md)
+- [USS_ARCHITECTURE.md](./USS_ARCHITECTURE.md)

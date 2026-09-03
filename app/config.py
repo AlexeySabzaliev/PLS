@@ -11,6 +11,13 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 project_root = os.path.abspath(os.path.join(basedir, ".."))
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.lower() in ("1", "true", "yes")
+
+
 def resolve_database_uri(uri: str | None = None) -> str:
     raw = (uri or os.environ.get("DATABASE_URL") or "").strip()
     if not raw:
@@ -57,7 +64,32 @@ class Config:
     SSO_OIDC_SCOPE = os.getenv("SSO_OIDC_SCOPE", "openid email profile")
     SSO_DEV_IDENTITY = os.getenv("SSO_DEV_IDENTITY", "").strip()
 
+    # Dev-заглушки интеграций (игнорируются в production)
+    PLS_SSO_STUB = _env_bool("PLS_SSO_STUB")
+    SECURITY_PORTAL_STUB = _env_bool("SECURITY_PORTAL_STUB")
+
     ARISTON_BILLING_FIXTURES_PATH = os.getenv("ARISTON_BILLING_FIXTURES_PATH", "").strip()
+
+    # После одноразового импорта из Billings — блокировать перезапись справочников сидами
+    PLS_FREEZE_REFERENCE = _env_bool("PLS_FREEZE_REFERENCE")
+    BILLINGS_DATABASE_URL = os.getenv("BILLINGS_DATABASE_URL", "").strip()
+
+
+def _apply_dev_stub_overrides(cfg: type[Config]) -> None:
+    """Включить SSO/охрану в dev без prod-конфигурации."""
+    if os.getenv("FLASK_ENV", "development").lower() == "production":
+        return
+    if cfg.PLS_SSO_STUB:
+        cfg.SSO_ENABLED = True
+        if not cfg.SSO_DEV_IDENTITY:
+            cfg.SSO_DEV_IDENTITY = (
+                os.getenv("PLS_ADMIN_EMAIL", "admin@bsh-ru.ru").strip() or "admin@bsh-ru.ru"
+            )
+    if cfg.SECURITY_PORTAL_STUB:
+        os.environ.setdefault("SECURITY_PORTAL_STUB", "1")
+
+
+_apply_dev_stub_overrides(Config)
 
 
 class DevelopmentConfig(Config):
@@ -74,6 +106,8 @@ class TestingConfig(Config):
     WTF_CSRF_ENABLED = False
     SSO_ENABLED = False
     SSO_ALLOW_PASSWORD_LOGIN = True
+    # Тесты не должны наследовать PLS_FREEZE_REFERENCE из .env prod/dev
+    PLS_FREEZE_REFERENCE = False
 
 
 config = {

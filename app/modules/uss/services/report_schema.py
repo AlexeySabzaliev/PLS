@@ -4,7 +4,11 @@ from __future__ import annotations
 from datetime import date
 
 from app.db import db
-from app.modules.reference.models import ContractAmendment, TariffRule, UnitOfMeasure
+from app.modules.reference.amendment_scope import (
+    amendment_effective_from,
+    primary_amendment_for_contract_on_date,
+)
+from app.modules.reference.models import TariffRule, UnitOfMeasure
 from app.modules.uss.services.tariff_quantity import (
     apply_tariff_defaults,
     effective_quantity_source,
@@ -30,7 +34,7 @@ TRANSPORT_FIXED_FIELDS = [
     },
     {"field": "waybill_numbers", "label": "Накладная, №", "input_type": "waybill_column"},
     {"field": "mx_numbers", "label": "МХ-1 / МХ-3, №", "input_type": "mx_column"},
-    {"field": "vehicle_type_id", "label": "Тип ТС (объём / габариты)", "input_type": "vehicle_type"},
+    {"field": "vehicle_type_id", "label": "Тип ТС", "input_type": "vehicle_type"},
     {"field": "seal_number", "label": "Пломба, №", "input_type": "text"},
     {"field": "torg2_number", "label": "Торг-2, №", "input_type": "text"},
     {"field": "volume_document_m3", "label": "Объём, м³", "input_type": "number"},
@@ -44,10 +48,15 @@ TRANSPORT_FIXED_FIELDS = [
             {"value": "mechanized", "label": "Механизированный"},
         ],
     },
-    {"field": "extra_handling_m3", "label": "Доп. обработка, м³", "input_type": "number"},
     {"field": "registered_at", "label": "Прибытие", "input_type": "time"},
     {"field": "departed_at", "label": "Убытие", "input_type": "time"},
 ]
+
+_EXTRA_HANDLING_FIELD = {
+    "field": "extra_handling_m3",
+    "label": "Доп. обработка, м³",
+    "input_type": "number",
+}
 
 _EXTRA_DOC_FIELD = {
     "field": "extra_document_set_qty",
@@ -56,45 +65,102 @@ _EXTRA_DOC_FIELD = {
 }
 
 
-def _transport_fixed_fields(role_tariffs: list[dict]) -> list[dict]:
-    """Базовые поля ТС + «Доп. комплект» только если нет разбивки по ставкам ДС."""
+def _vehicle_tariff_column(inp: dict) -> dict:
+    """Колонка ручного тарифа на строке ТС (manual_vehicle)."""
+    code = inp["billing_line_code"]
+    unit = (inp.get("unit_code") or "").strip()
+    label = inp.get("name") or code
+    if unit:
+        label = f"{label}, {unit}"
+    return {
+        "field": f"rq_{code}",
+        "label": label,
+        "input_type": "number",
+        "billing_line_code": code,
+        "tariff_input": True,
+    }
+
+
+def _active_tariff_codes(tariffs: list[dict]) -> set[str]:
+    return {(t.get("billing_line_code") or "").strip() for t in tariffs if t.get("billing_line_code")}
+
+
+def _transport_fixed_fields(
+    role_tariffs: list[dict],
+    vehicle_inputs: list[dict] | None = None,
+    *,
+    active_tariffs: list[dict] | None = None,
+) -> list[dict]:
+    """Базовые поля ТС + ручные ставки ДС как колонки после «Тип обработки»."""
+    tariff_codes = _active_tariff_codes(active_tariffs or role_tariffs)
     fields = list(TRANSPORT_FIXED_FIELDS)
+    if "extra_manual_m3" in tariff_codes:
+        idx = next(i for i, f in enumerate(fields) if f["field"] == "handling_type_code") + 1
+        fields.insert(idx, dict(_EXTRA_HANDLING_FIELD))
     manual_codes = {
         t["billing_line_code"]
         for t in role_tariffs
         if needs_manual_vehicle_input(t)
     }
-    # Аристон и др.: RF/RB/ELCO — отдельные ручные колонки по ставкам договора
+    tariff_cols = [
+        _vehicle_tariff_column(inp)
+        for inp in sorted(vehicle_inputs or [], key=lambda x: (x.get("sort_order") or 0, x.get("billing_line_code") or ""))
+    ]
+    # Аристон: RF/RB/ELCO — отдельные колонки из vehicle_inputs, без legacy «Доп. комплект»
     if manual_codes & {"extra_vehicle_docs_rf", "extra_vehicle_docs_rb", "elco_passports"}:
-        return fields
-    # Общий случай: одно поле → ставка extra_vehicle_docs
+        return _inject_tariff_columns(fields, tariff_cols)
+    # Общий случай: одно поле → ставка extra_vehicle_docs (системная колонка)
     if any(
         is_transport_field_code(t.get("billing_line_code"))
         or t.get("billing_line_code") == "extra_vehicle_docs"
         for t in role_tariffs
-    ):
-        return [*fields, dict(_EXTRA_DOC_FIELD)]
-    return fields
+    ) or "extra_vehicle_docs" in tariff_codes:
+        return _inject_tariff_columns([*fields, dict(_EXTRA_DOC_FIELD)], tariff_cols)
+    return _inject_tariff_columns(fields, tariff_cols)
 
 
-def _active_tariffs(contract_id: int, on_date: date) -> list[dict]:
-    amendments = ContractAmendment.query.filter(
-        ContractAmendment.contract_id == contract_id,
-        ContractAmendment.status == "active",
-        ContractAmendment.effective_from <= on_date,
-        db.or_(
-            ContractAmendment.effective_to.is_(None),
-            ContractAmendment.effective_to >= on_date,
-        ),
-    ).all()
-    am_ids = [a.id for a in amendments]
-    if not am_ids:
+def _inject_tariff_columns(fields: list[dict], tariff_cols: list[dict]) -> list[dict]:
+    """Вставить колонки тарифов после «Тип обработки», перед временами прибытия/убытия."""
+    if not tariff_cols:
+        return fields
+    result: list[dict] = []
+    inserted = False
+    for f in fields:
+        result.append(f)
+        if f["field"] == "handling_type_code" and not inserted:
+            result.extend(tariff_cols)
+            inserted = True
+    if not inserted:
+        before_time = next((i for i, f in enumerate(result) if f["field"] == "registered_at"), len(result))
+        result[before_time:before_time] = tariff_cols
+    return result
+
+
+def _resolve_amendment_id(
+    contract_id: int,
+    on_date: date,
+    amendment_id: int | None,
+) -> int | None:
+    if amendment_id is not None:
+        return amendment_id
+    amd = primary_amendment_for_contract_on_date(contract_id, on_date)
+    return amd.id if amd else None
+
+
+def _active_tariffs(
+    contract_id: int,
+    on_date: date,
+    *,
+    amendment_id: int | None = None,
+) -> list[dict]:
+    am_id = _resolve_amendment_id(contract_id, on_date, amendment_id)
+    if not am_id:
         return []
 
     rows = (
         TariffRule.query.filter(
             TariffRule.contract_id == contract_id,
-            TariffRule.amendment_id.in_(am_ids),
+            TariffRule.amendment_id == am_id,
             TariffRule.valid_from <= on_date,
             db.or_(TariffRule.valid_to.is_(None), TariffRule.valid_to >= on_date),
         )
@@ -148,8 +214,14 @@ def _tariff_row(t: dict, *, input_kind: str) -> dict:
     }
 
 
-def schema_for_contract_role(contract_id: int, on_date: date, role: str) -> dict:
-    """Схема ввода для договора и роли отчёта."""
+def schema_for_contract_role(
+    contract_id: int,
+    on_date: date,
+    role: str,
+    *,
+    amendment_id: int | None = None,
+) -> dict:
+    """Схема ввода для договора и роли отчёта (одно ДС на дату)."""
     if role not in REPORT_ROLES:
         return {
             "report_role": role,
@@ -160,12 +232,14 @@ def schema_for_contract_role(contract_id: int, on_date: date, role: str) -> dict
             "vehicle_fixed_fields": [],
         }
 
-    tariffs = _active_tariffs(contract_id, on_date)
+    resolved_amendment_id = _resolve_amendment_id(contract_id, on_date, amendment_id)
+    tariffs = _active_tariffs(contract_id, on_date, amendment_id=resolved_amendment_id)
     role_tariffs = [t for t in tariffs if tariff_in_role_report(t, role)]
 
     schema = {
         "report_role": role,
         "contract_id": contract_id,
+        "amendment_id": resolved_amendment_id,
         "on_date": on_date.isoformat(),
         "vehicle_inputs": [
             _tariff_row(t, input_kind="vehicle")
@@ -190,12 +264,10 @@ def schema_for_contract_role(contract_id: int, on_date: date, role: str) -> dict
         "vehicle_fixed_fields": [],
     }
     if role == "transport_logistics":
-        schema["vehicle_fixed_fields"] = _transport_fixed_fields(role_tariffs)
-        manual = schema["vehicle_inputs"]
-        schema["vehicle_tariff_hint"] = (
-            "Дополнительные тарифицируемые поля по ставкам договора (ввод на строке ТС):"
-            if manual
-            else None
+        schema["vehicle_fixed_fields"] = _transport_fixed_fields(
+            role_tariffs,
+            schema["vehicle_inputs"],
+            active_tariffs=tariffs,
         )
     return schema
 

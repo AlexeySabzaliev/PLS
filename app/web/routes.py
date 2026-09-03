@@ -41,6 +41,26 @@ def uss_billing():
     return render_template("uss/billing.html", user=get_current_user(), active="billing")
 
 
+@bp.get("/uss/reports")
+def uss_reports_hub():
+    return render_template(
+        "uss/reports.html",
+        user=get_current_user(),
+        active="reports",
+        report_section="hub",
+    )
+
+
+@bp.get("/uss/reports/fot")
+def uss_reports_fot():
+    return render_template(
+        "uss/fot.html",
+        user=get_current_user(),
+        active="reports",
+        report_section="fot",
+    )
+
+
 @bp.get("/admin/reference")
 def admin_reference():
     return render_template("admin/reference.html", user=get_current_user())

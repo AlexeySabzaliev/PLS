@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from app.modules.uss.services.tariff_codes import BILLING_MERGE_INTO, billing_line_for_tariff
+from app.modules.uss.services.tariff_codes import (
+    BILLING_LINE_SHORT_NAMES,
+    BILLING_MERGE_INTO,
+    UNIT_BY_CODE,
+    billing_line_for_tariff,
+)
 
 QUANTITY_SOURCES = frozenset({
     "auto_vehicle",
@@ -30,6 +35,7 @@ SYSTEM_FORMULA_HINTS: dict[str, str] = {
     "extra_vehicle_docs": "Сумма из поля «Доп. комплект» по ТС",
     "overtime_m3": "Объём обработки сверхурочных ТС",
     "repack_units": "Количество из отчёта упр. запасами (без привязки к ТС)",
+    "custom_pallet": "Количество паллет из строки ТС (транспорт)",
 }
 
 TRANSPORT_FIELD_CODES = frozenset({"extra_manual_m3", "extra_vehicle_docs"})
@@ -102,6 +108,11 @@ LINE_QUANTITY_REGISTRY: dict[str, LineQuantityDef] = {
         default_report_scope="period",
         inventory_slot="extra",
     ),
+    "custom_pallet": LineQuantityDef(
+        "manual_vehicle",
+        default_report_role="transport_logistics",
+        default_report_scope="vehicle",
+    ),
     "inventory_hours": LineQuantityDef(
         "manual_inventory",
         default_report_role="inventory_management",
@@ -151,24 +162,86 @@ def line_def(billing_line_code: str | None) -> LineQuantityDef | None:
 
 
 def effective_quantity_source(tariff: dict) -> str:
-    explicit = (tariff.get("quantity_source") or "").strip()
-    if explicit in QUANTITY_SOURCES:
-        return explicit
-    reg = line_def(tariff.get("billing_line_code"))
-    if reg:
-        return reg.quantity_source
-    scope = (tariff.get("report_scope") or "").strip()
+    """Источник количества: роль отчёта и реестр кодов важнее устаревшего quantity_source в БД."""
+    code = (tariff.get("billing_line_code") or "").strip()
+    reg = line_def(code)
     role = (tariff.get("report_role") or "").strip()
-    if scope == "vehicle":
-        return "manual_vehicle"
+    scope = (tariff.get("report_scope") or "").strip()
+    explicit = (tariff.get("quantity_source") or "").strip()
+    accounting = (tariff.get("accounting_mode") or "").strip()
+
+    if accounting == "billing_only":
+        return "none"
+    if accounting == "system" and reg:
+        return reg.quantity_source
+
+    if reg and reg.quantity_source in INTRINSIC_AUTO_SOURCES:
+        return reg.quantity_source
+
+    if reg and reg.default_report_role and role == reg.default_report_role:
+        return reg.quantity_source
+
+    # Роль отчёта задаёт ручной ввод (исправляет manual_daily у repack_units и т.п.)
     if role == "inventory_management":
         return "manual_inventory"
+    if role in ROLE_ALLOWED_SOURCES:
+        allowed = ROLE_ALLOWED_SOURCES[role]
+        if scope == "vehicle" and "manual_vehicle" in allowed:
+            return "manual_vehicle"
+        if scope == "period" and "manual_daily" in allowed:
+            return "manual_daily"
+        if explicit in allowed:
+            return explicit
+        return ROLE_OPERATIONAL_DEFAULTS[role][0]
+
+    if explicit in QUANTITY_SOURCES:
+        return explicit
+    if reg:
+        return reg.quantity_source
+    if scope == "vehicle":
+        return "manual_vehicle"
     if scope == "period":
         return "manual_daily"
     return "manual_daily"
 
 
 INTRINSIC_AUTO_SOURCES = frozenset({"auto_vehicle", "auto_contract_param"})
+
+_QUANTITY_SOURCE_HINT: dict[str, str] = {
+    "auto_contract_param": "auto_contract_param",
+    "auto_vehicle": "auto_vehicle",
+    "manual_vehicle": "manual_vehicle",
+    "manual_daily": "manual_daily",
+    "manual_inventory": "manual_inventory",
+    "none": "none",
+}
+
+
+def billing_line_code_choices() -> list[dict]:
+    """Справочник известных billing_line_code для UI каталога ставок."""
+    choices: list[dict] = []
+    for code, reg in LINE_QUANTITY_REGISTRY.items():
+        short = BILLING_LINE_SHORT_NAMES.get(code, code)
+        src_hint = _QUANTITY_SOURCE_HINT.get(reg.quantity_source, reg.quantity_source)
+        label = f"{short} — {src_hint}"
+        if reg.default_report_role:
+            label = f"{short} — {src_hint}, {reg.default_report_role}"
+        scope = reg.default_report_scope
+        if reg.quantity_source == "manual_vehicle":
+            scope = scope or "vehicle"
+        elif reg.quantity_source in ("manual_daily", "manual_inventory"):
+            scope = scope or "period"
+        elif reg.quantity_source in INTRINSIC_AUTO_SOURCES:
+            scope = "period"
+        choices.append({
+            "value": code,
+            "label": label,
+            "unit_code": UNIT_BY_CODE.get(code),
+            "report_role": reg.default_report_role,
+            "quantity_source": reg.quantity_source,
+            "report_scope": scope,
+        })
+    return choices
 
 
 def is_intrinsic_auto_code(billing_line_code: str | None) -> bool:
@@ -265,6 +338,17 @@ def apply_tariff_defaults(tariff: dict) -> dict:
             out["report_scope"] = scope
     if reg and reg.inventory_slot and out.get("report_role") == "inventory_management":
         out.setdefault("inventory_slot", reg.inventory_slot)
+    if reg and reg.default_report_role:
+        probe = dict(out)
+        probe["report_role"] = reg.default_report_role
+        if reg.default_report_scope:
+            probe["report_scope"] = reg.default_report_scope
+        elif reg.quantity_source == "manual_vehicle":
+            probe["report_scope"] = "vehicle"
+        if effective_quantity_source(probe) != effective_quantity_source(out):
+            out["report_role"] = reg.default_report_role
+            out["report_scope"] = probe["report_scope"]
+    out["quantity_source"] = effective_quantity_source(out)
     return out
 
 

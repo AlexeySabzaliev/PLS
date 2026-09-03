@@ -48,8 +48,17 @@ def test_transport_schema_has_operation_select(auth_client, client):
     assert handling["input_type"] == "select"
     assert any(c["value"] == "inbound" for c in op["choices"])
     assert any(c["value"] == "manual" for c in handling["choices"])
-    tariff_codes = [t["billing_line_code"] for t in resp.json["schemas"]["1"]["vehicle_inputs"]]
+    tariff_cols = [f for f in fields if f.get("tariff_input")]
+    tariff_codes = [f["billing_line_code"] for f in tariff_cols]
     assert "extra_vehicle_docs_rf" in tariff_codes
+    assert "elco_passports" in tariff_codes
+    handling_idx = field_names.index("handling_type_code")
+    reg_idx = field_names.index("registered_at")
+    first_tariff_idx = field_names.index(tariff_cols[0]["field"])
+    assert handling_idx < first_tariff_idx < reg_idx
+    assert "extra_handling_m3" not in field_names
+    schema_vehicle_codes = [t["billing_line_code"] for t in resp.json["schemas"]["1"]["vehicle_inputs"]]
+    assert "extra_vehicle_docs_rf" in schema_vehicle_codes
 
 
 def test_save_vehicle_report_quantities(auth_client, client):
@@ -82,3 +91,41 @@ def test_day_confirm(auth_client, client):
     )
     assert resp.status_code == 200
     assert "transport_logistics" in resp.json["confirmed"]
+
+
+def test_save_transport_daily(auth_client, client):
+    auth_client("transport@test.local", "test")
+    payload = {
+        "warehouse_id": 1,
+        "contract_id": 1,
+        "report_date": "2026-08-04",
+        "entries": [{"billing_line_code": "is_custom", "quantity": 3}],
+    }
+    resp = client.post("/api/uss/transport/daily", json=payload)
+    assert resp.status_code == 200
+    assert resp.json["saved"]
+
+    shift = client.get("/api/uss/transport/shift?warehouse_id=1&date=2026-08-04").json
+    totals = shift["daily_totals"].get("1") or []
+    row = next(t for t in totals if t["billing_line_code"] == "is_custom")
+    assert row["quantity"] == 3.0
+
+
+def test_vehicle_overtime_in_shift_list(auth_client, client):
+    auth_client("transport@test.local", "test")
+    payload = {
+        "warehouse_id": 1,
+        "contract_id": 1,
+        "operation_date": "2026-08-03",
+        "tractor_plate": "О777ОО77",
+        "operation_type_code": "inbound",
+        "handling_type_code": "manual",
+        "volume_document_m3": 10,
+        "departed_at": "19:30",
+    }
+    resp = client.post("/api/uss/transport/vehicles", json=payload)
+    assert resp.status_code == 200
+
+    shift = client.get("/api/uss/transport/shift?warehouse_id=1&date=2026-08-03").json
+    row = next(v for v in shift["vehicles"] if v["tractor_plate"] == "О777ОО77")
+    assert row["is_overtime"] is True

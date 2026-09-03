@@ -82,3 +82,40 @@ class ShiftDayConfirmation(db.Model):
     report_role = db.Column(db.String(64), nullable=False)
     confirmed_by = db.Column(db.Integer, db.ForeignKey("users.id"))
     confirmed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class WarehouseStaffPosition(db.Model):
+    """Штат ответхранения: должность, оклад/мес, количество."""
+    __tablename__ = "warehouse_staff_positions"
+    id = db.Column(db.Integer, primary_key=True)
+    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+    monthly_rate = db.Column(db.Numeric(18, 2), nullable=False, default=0)
+    headcount = db.Column(db.SmallInteger, nullable=False, default=1)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    versions = db.relationship(
+        "WarehouseStaffPositionVersion",
+        back_populates="position",
+        cascade="all, delete-orphan",
+    )
+
+
+class WarehouseStaffPositionVersion(db.Model):
+    """История окладов/численности штата ФОТ."""
+    __tablename__ = "warehouse_staff_position_versions"
+    id = db.Column(db.Integer, primary_key=True)
+    position_id = db.Column(
+        db.Integer,
+        db.ForeignKey("warehouse_staff_positions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+    monthly_rate = db.Column(db.Numeric(18, 2), nullable=False, default=0)
+    headcount = db.Column(db.SmallInteger, nullable=False, default=1)
+    valid_from = db.Column(db.Date, nullable=False)
+    valid_to = db.Column(db.Date)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    position = db.relationship("WarehouseStaffPosition", back_populates="versions")

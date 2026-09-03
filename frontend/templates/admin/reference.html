@@ -10,25 +10,27 @@
   <header class="pls-header">
     <a href="/" class="pls-logo">ПЛС</a>
     <nav class="pls-nav">
-      <a href="/uss/transport">Транспорт</a>
-      <a href="/uss/warehouse">Склад</a>
-      <a href="/uss/inventory">Запасы</a>
+      <a href="/uss/transport">Транспортная логистика</a>
+      <a href="/uss/warehouse">Складская логистика</a>
+      <a href="/uss/inventory">Управление запасами</a>
+      <a href="/uss/billing">Биллинг</a>
       <a href="/admin/reference" class="active">Справочники</a>
       <a href="/admin/sso">SSO заявки</a>
     </nav>
     {% if user %}
-    <span class="pls-user">{{ user.email }}</span>
+    {% include 'includes/pls_user_bar.html' %}
     {% endif %}
   </header>
   <main class="pls-main admin-ref">
     <h1>Справочники</h1>
-    <p class="muted">CRUD через <code>/api/reference/&lt;catalog&gt;</code></p>
+    <p id="catalog-hint" class="muted">Выберите раздел слева. Для изменения записи нажмите «Изменить».</p>
     <p id="status" class="status">Загрузка…</p>
     <div class="ref-layout">
       <nav id="catalog-nav" class="ref-nav"></nav>
       <section id="catalog-panel" class="ref-panel"></section>
     </div>
   </main>
+  <script src="/static/js/pls_header.js"></script>
   <script src="/static/js/reference-ui.js"></script>
 </body>
 </html>

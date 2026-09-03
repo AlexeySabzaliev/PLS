@@ -33,6 +33,7 @@ class ProductType(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(32), unique=True, nullable=False)
     name = db.Column(db.String(128), nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
 
 
 class Contract(db.Model, TimestampMixin):
@@ -54,9 +55,10 @@ class ContractAmendment(db.Model, TimestampMixin):
     id = db.Column(db.Integer, primary_key=True)
     contract_id = db.Column(db.Integer, db.ForeignKey("contracts.id"), nullable=False)
     number = db.Column(db.String(64), nullable=False)
-    status = db.Column(db.String(32), default="active", nullable=False)
+    status = db.Column(db.String(32), default="draft", nullable=False)
     effective_from = db.Column(db.Date, nullable=False)
     effective_to = db.Column(db.Date)
+    source_file_path = db.Column(db.String(512))
     contract = db.relationship("Contract")
 
 
@@ -65,6 +67,7 @@ class UnitOfMeasure(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(16), unique=True, nullable=False)
     name = db.Column(db.String(64), nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
 
 
 class TariffRule(db.Model, TimestampMixin):
@@ -154,6 +157,19 @@ class UserWarehouseAccess(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False)
+
+
+class SectionMaintenance(db.Model):
+    """Заглушка раздела или роли (техобслуживание)."""
+    __tablename__ = "section_maintenance"
+    id = db.Column(db.Integer, primary_key=True)
+    target_type = db.Column(db.String(16), nullable=False)  # section | role
+    target_key = db.Column(db.String(64), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    updated_by = db.Column(db.Integer, db.ForeignKey("users.id"))
+    __table_args__ = (db.UniqueConstraint("target_type", "target_key"),)
 
 
 class SsoAccessRequest(db.Model):

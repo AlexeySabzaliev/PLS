@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from app.modules.uss.services.tariff_quantity import (
     apply_tariff_defaults,
+    billing_line_code_choices,
     collect_manual_quantity_warnings,
     effective_quantity_source,
     needs_manual_inventory_input,
@@ -11,6 +12,15 @@ from app.modules.uss.services.tariff_quantity import (
     resolve_tariff_period_quantity,
 )
 from app.modules.uss.services.tariff_report import tariff_in_role_report
+
+
+def test_billing_line_code_choices_catalog():
+    choices = billing_line_code_choices()
+    assert len(choices) >= 15
+    fixed = next(c for c in choices if c["value"] == "storage_area_fixed")
+    assert "Хранение на площади (фикс)" in fixed["label"]
+    assert fixed["unit_code"] == "m2"
+    assert fixed["quantity_source"] == "auto_contract_param"
 
 
 def test_storage_area_fixed_never_gets_report_role():
@@ -61,6 +71,23 @@ def test_elco_is_manual_daily_warehouse():
     t = apply_tariff_defaults({"billing_line_code": "elco_drain_hours"})
     assert effective_quantity_source(t) == "manual_daily"
     assert t["report_role"] == "warehouse_logistics"
+
+
+def test_custom_pallet_is_manual_vehicle_transport():
+    t = apply_tariff_defaults({"billing_line_code": "custom_pallet"})
+    assert t["report_role"] == "transport_logistics"
+    assert effective_quantity_source(t) == "manual_vehicle"
+    assert needs_manual_vehicle_input(t)
+
+
+def test_custom_pallet_fixes_stale_inventory_role():
+    t = apply_tariff_defaults({
+        "billing_line_code": "custom_pallet",
+        "report_role": "inventory_management",
+        "quantity_source": "manual_inventory",
+    })
+    assert t["report_role"] == "transport_logistics"
+    assert effective_quantity_source(t) == "manual_vehicle"
 
 
 def test_custom_transport_role_gets_manual_vehicle():
@@ -189,3 +216,56 @@ def test_avg_inventory_area_from_dict_entries():
         "storage_area_extra",
     )
     assert avg == Decimal("150")
+
+
+def test_effective_source_inventory_overrides_wrong_daily():
+    t = {
+        "billing_line_code": "repack_units",
+        "report_role": "inventory_management",
+        "quantity_source": "manual_daily",
+    }
+    assert effective_quantity_source(t) == "manual_inventory"
+    assert needs_manual_inventory_input(t)
+
+
+def test_effective_source_transport_vehicle_from_scope():
+    t = {
+        "billing_line_code": "elco_passports",
+        "report_role": "transport_logistics",
+        "report_scope": "vehicle",
+        "quantity_source": "manual_daily",
+    }
+    assert effective_quantity_source(t) == "manual_vehicle"
+    assert needs_manual_vehicle_input(t)
+
+
+def test_effective_source_transport_daily_from_scope():
+    t = {
+        "billing_line_code": "custom_valve",
+        "report_role": "transport_logistics",
+        "report_scope": "period",
+        "quantity_source": "manual_vehicle",
+    }
+    assert effective_quantity_source(t) == "manual_daily"
+
+
+def test_tariff_in_role_report_includes_transport_extras_with_stale_source():
+    t = apply_tariff_defaults({
+        "billing_line_code": "elco_passports",
+        "report_role": "transport_logistics",
+        "report_scope": "vehicle",
+        "quantity_source": "manual_daily",
+        "is_custom": True,
+    })
+    assert tariff_in_role_report(t, "transport_logistics")
+    assert needs_manual_vehicle_input(t)
+
+
+def test_tariff_in_role_report_includes_inventory_with_stale_daily_source():
+    t = apply_tariff_defaults({
+        "billing_line_code": "repack_units",
+        "report_role": "inventory_management",
+        "quantity_source": "manual_daily",
+    })
+    assert tariff_in_role_report(t, "inventory_management")
+    assert needs_manual_inventory_input(t)

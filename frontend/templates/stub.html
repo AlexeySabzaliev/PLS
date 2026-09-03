@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+
+<html lang="ru">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <title>{{ title }} — {{ app_short }}</title>
+
+  <link rel="stylesheet" href="/static/css/main.css">
+
+</head>
+
+<body>
+
+  <header class="pls-header">
+
+    <a href="/" class="pls-logo">{{ app_short }}</a>
+
+    <nav class="pls-nav">
+
+      {% if module == 'uss' %}
+
+      <a href="/uss/" class="active">{{ module_name }}</a>
+
+      {% else %}
+
+      <a href="/uznt/" class="active">{{ module_name }}</a>
+
+      {% endif %}
+
+    </nav>
+
+    {% include 'includes/pls_user_bar.html', header_home_link=true %}
+
+  </header>
+
+  <main class="pls-main">
+
+    <div class="pls-stub-card">
+
+      <p class="pls-stub-badge">{{ module_name }}</p>
+
+      <h1 class="page-title">{{ title }}</h1>
+
+      <p class="pls-stub-text">{{ description }}</p>
+
+      {% if links %}
+
+      <div class="pls-stub-links">
+
+        {% for link in links %}
+
+        <a class="btn-secondary" href="{{ link.href }}">{{ link.label }}</a>
+
+        {% endfor %}
+
+      </div>
+
+      {% endif %}
+
+      <p class="muted small"><a href="/">← На главную ПЛС</a></p>
+
+    </div>
+
+  </main>
+  <script src="/static/js/pls_header.js"></script>
+</body>
+
+</html>
+

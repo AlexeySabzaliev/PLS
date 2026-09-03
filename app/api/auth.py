@@ -7,6 +7,7 @@ from app.config import Config
 from app.core.auth import attempt_sso_login, get_current_user, login_user_password, logout_user
 from app.core.sso import normalize_identity, resolve_sso_identity
 from app.core.sso import sso_config_public
+from app.services.maintenance import maintenance_for_user
 
 bp = Blueprint("auth_api", __name__, url_prefix="/api/auth")
 
@@ -63,4 +64,5 @@ def me():
         return {"error": "unauthorized"}, 401
     payload = dict(user)
     payload["sso"] = sso_config_public()
+    payload["maintenance"] = maintenance_for_user(user)
     return payload

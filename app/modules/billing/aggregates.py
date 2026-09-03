@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from app.db import db
 from app.modules.uss.models import OperationDailyTotal, VehicleOperation
+from app.modules.uss.services.overtime import row_is_overtime
 
 
 def _d(value) -> Decimal:
@@ -85,6 +86,8 @@ def vehicle_operation_to_billing_dict(row: VehicleOperation) -> dict:
         "inbound_mech_m3": rq.get("inbound_mech_m3", 0),
         "outbound_mech_m3": rq.get("outbound_mech_m3", 0),
         "report_quantities": rq,
+        "departed_at": row.departed_at,
+        "is_overtime": row_is_overtime(row.operation_date, departed_at=row.departed_at),
     }
 
 

@@ -46,7 +46,6 @@ UNITS = [
 WAREHOUSES = [
     ("sofino", "Софьино"),
     ("strelna", "Стрельна"),
-    ("spb1", "СПб-1"),
 ]
 
 ROLE_DEFINITIONS = [
@@ -69,6 +68,9 @@ def _all_section_permissions() -> dict[str, set[str]]:
 
 def seed_reference(*, verbose: bool = False) -> dict:
     """Справочники, роли, права разделов."""
+    from flask import current_app
+
+    frozen = current_app.config.get("PLS_FREEZE_REFERENCE")
     stats = {
         "product_types": 0,
         "units": 0,
@@ -78,14 +80,22 @@ def seed_reference(*, verbose: bool = False) -> dict:
     }
 
     for code, name in PRODUCT_TYPES:
-        if not ProductType.query.filter_by(code=code).first():
-            db.session.add(ProductType(code=code, name=name))
+        row = ProductType.query.filter_by(code=code).first()
+        active = code == "RESPONSIBLE_STORAGE"
+        if not row:
+            db.session.add(ProductType(code=code, name=name, is_active=active))
             stats["product_types"] += 1
+        elif not frozen and (not hasattr(row, "is_active") or row.is_active is None):
+            row.is_active = active
 
     for code, name in UNITS:
-        if not UnitOfMeasure.query.filter_by(code=code).first():
-            db.session.add(UnitOfMeasure(code=code, name=name))
+        row = UnitOfMeasure.query.filter_by(code=code).first()
+        active = code not in ("m2day", "vehicle")
+        if not row:
+            db.session.add(UnitOfMeasure(code=code, name=name, is_active=active))
             stats["units"] += 1
+        elif not frozen and row.is_active is None:
+            row.is_active = active
 
     for code, name in WAREHOUSES:
         if not Warehouse.query.filter_by(code=code).first():

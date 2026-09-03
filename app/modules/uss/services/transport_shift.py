@@ -4,11 +4,22 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from app.db import db
+from app.modules.billing.period_lock import (
+    PeriodLockedError,
+    assert_operations_editable,
+    periods_status_for_contracts,
+)
 from app.modules.reference.models import Client, Contract, ProductType, VehicleType, Warehouse
+from app.modules.uss.services.shift_contracts import (
+    contracts_for_transport_shift,
+    serialize_primary_shift_blocks,
+    shift_date_bounds,
+)
 from app.modules.uss.models import VehicleOperation
 from app.modules.uss.services.operation_daily_totals import list_daily_totals, upsert_daily_totals
 from app.modules.uss.services.report_schema import schema_for_contract_role
 from app.modules.uss.services.security_intranet import (
+    _use_mock,
     fetch_all_for_warehouse,
     fetch_vehicle_requests,
     security_status,
@@ -19,6 +30,7 @@ from app.modules.uss.services.transport_waybills import (
     replace_waybills,
     waybills_from_legacy_row,
 )
+from app.modules.uss.services.overtime import row_is_overtime
 from app.modules.uss.services.vehicle_plates import combine_vehicle_plates, parse_vehicle_plates
 
 REPORT_ROLE = "transport_logistics"
@@ -150,43 +162,74 @@ def _serialize_vehicle(row: VehicleOperation, waybills_map: dict[int, list[dict]
         "extra_document_set_qty": row.extra_document_set_qty,
         "registered_at": _time_to_str(row.registered_at),
         "departed_at": _time_to_str(row.departed_at),
+        "is_overtime": row_is_overtime(row.operation_date, departed_at=row.departed_at),
         "report_quantities": rq,
     }
+
+
+def _dedupe_vehicle_rows(vehicles: list[VehicleOperation]) -> list[VehicleOperation]:
+    """Скрыть дубликаты импорта: одна строка на security_request_id или пару тягач/прицеп."""
+    kept: dict[tuple, VehicleOperation] = {}
+    for row in sorted(vehicles, key=lambda v: v.id, reverse=True):
+        key = (
+            row.contract_id,
+            (row.security_request_id or "").strip(),
+            (row.tractor_plate or "").strip(),
+            (row.trailer_plate or "").strip(),
+            (row.plate_number or "").strip(),
+        )
+        if key in kept:
+            continue
+        kept[key] = row
+    return sorted(kept.values(), key=lambda v: v.id)
 
 
 def list_transport_shift(user: dict, warehouse_id: int, day: date) -> dict:
     wh_ids = user.get("warehouse_ids") or []
     if warehouse_id not in wh_ids and not user.get("is_admin"):
         return {"error": "forbidden"}
-    contracts = (
-        Contract.query.join(ProductType)
-        .filter(
-            Contract.warehouse_id == warehouse_id,
-            Contract.status == "active",
-            ProductType.code == "RESPONSIBLE_STORAGE",
-        )
-        .all()
+    contracts = contracts_for_transport_shift(warehouse_id, day)
+    blocks = serialize_primary_shift_blocks(contracts, day)
+    vehicles = _dedupe_vehicle_rows(
+        VehicleOperation.query.filter_by(
+            warehouse_id=warehouse_id,
+            operation_date=day,
+        ).order_by(VehicleOperation.id).all()
     )
-    vehicles = VehicleOperation.query.filter_by(
-        warehouse_id=warehouse_id,
-        operation_date=day,
-    ).order_by(VehicleOperation.id).all()
     wb_map = load_waybills_for_operations([v.id for v in vehicles])
-    schemas = {
-        str(c.id): schema_for_contract_role(c.id, day, REPORT_ROLE) for c in contracts
-    }
+    schemas: dict[str, dict] = {}
+    for b in blocks:
+        sch = schema_for_contract_role(
+            b["contract_id"],
+            day,
+            REPORT_ROLE,
+            amendment_id=b.get("amendment_id"),
+        )
+        schemas[b["block_key"]] = sch
+        cid = str(b["contract_id"])
+        if cid not in schemas:
+            schemas[cid] = sch
+    contract_ids = list({b["contract_id"] for b in blocks})
     daily_totals = {
-        str(c.id): list_daily_totals(c.id, warehouse_id, day) for c in contracts
+        str(cid): list_daily_totals(cid, warehouse_id, day) for cid in contract_ids
     }
+    period_locks = periods_status_for_contracts(contract_ids, day.year, day.month)
+    min_date, max_date = shift_date_bounds()
+    wh = db.session.get(Warehouse, warehouse_id) if warehouse_id else None
     return {
         "warehouse_id": warehouse_id,
         "operation_date": day.isoformat(),
         "report_role": REPORT_ROLE,
-        "contracts": [{"id": c.id, "number": c.number, "client_id": c.client_id} for c in contracts],
+        "contracts": blocks,
+        "today": date.today().isoformat(),
+        "min_date": min_date,
+        "max_date": max_date,
         "schemas": schemas,
         "daily_totals": daily_totals,
+        "period_locks": {str(k): v for k, v in period_locks.items()},
         "vehicle_types": _list_vehicle_types(),
         "security": security_status(),
+        "security_visit_place": wh.security_visit_place if wh else None,
         "vehicles": [_serialize_vehicle(v, wb_map) for v in vehicles],
     }
 
@@ -197,6 +240,10 @@ def save_vehicle_row(user: dict, payload: dict) -> dict:
     if wh_id not in wh_ids and not user.get("is_admin"):
         return {"error": "forbidden"}
     op_date = date.fromisoformat(str(payload["operation_date"])[:10])
+    try:
+        assert_operations_editable(user, int(payload["contract_id"]), op_date)
+    except PeriodLockedError as exc:
+        return {"error": "period_locked", "message": str(exc)}
     row_id = payload.get("id")
     if row_id:
         row = db.session.get(VehicleOperation, row_id)
@@ -255,6 +302,10 @@ def save_transport_daily(user: dict, payload: dict) -> dict:
     if wh_id not in wh_ids and not user.get("is_admin"):
         return {"error": "forbidden"}
     report_date = date.fromisoformat(str(payload["report_date"])[:10])
+    try:
+        assert_operations_editable(user, int(payload["contract_id"]), report_date)
+    except PeriodLockedError as exc:
+        return {"error": "period_locked", "message": str(exc)}
     saved = upsert_daily_totals(
         payload["contract_id"],
         wh_id,
@@ -303,18 +354,17 @@ def _upsert_security_vehicle(
 def sync_transport_security(user: dict, warehouse_id: int, day: date) -> dict:
     wh_ids = user.get("warehouse_ids") or []
     if warehouse_id not in wh_ids and not user.get("is_admin"):
-        return {"error": "forbidden"}
+        return {"error": "forbidden", "message": "Нет доступа к этому складу"}
 
-    contracts = (
-        Contract.query.join(Client).join(Warehouse)
-        .filter(
-            Contract.warehouse_id == warehouse_id,
-            Contract.status == "active",
-        )
-        .all()
-    )
+    contracts = contracts_for_transport_shift(warehouse_id, day)
     if not contracts:
-        return {"synced": 0, "source": "none", "details": []}
+        return {
+            "synced": 0,
+            "source": "none",
+            "details": [],
+            "message": "Нет активных договоров ОХ на складе — синхронизация с охраной невозможна",
+            "security": security_status(),
+        }
 
     wh = db.session.get(Warehouse, warehouse_id)
     visit_place = wh.security_visit_place if wh else None
@@ -322,9 +372,19 @@ def sync_transport_security(user: dict, warehouse_id: int, day: date) -> dict:
     sources: set[str] = {fetch_source}
     total = 0
     details = []
+    warnings: list[str] = []
+    parse_stats: dict = {}
 
+    if not visit_place and fetch_source not in ("mock", "stub", "mock_fallback"):
+        warnings.append(
+            "Не задано «Место визита СБ» у склада — в портале может быть слишком много заявок "
+            "или фильтр не сработает. Укажите значение в справочнике «Склады»."
+        )
+
+    assigned_requests: set[str] = set()
     for contract in contracts:
         client = db.session.get(Client, contract.client_id)
+        contract_stats: dict = {}
         rows, source = fetch_vehicle_requests(
             client_name=client.name if client else "",
             security_name=client.security_name if client else None,
@@ -332,9 +392,52 @@ def sync_transport_security(user: dict, warehouse_id: int, day: date) -> dict:
             day=day,
             prefetched=prefetched,
             fetch_source=fetch_source,
+            stats=contract_stats,
         )
         sources.add(source)
+        details.append({
+            "contract_id": contract.id,
+            "client_name": client.name if client else None,
+            "synced": len(rows),
+            "source": source,
+        })
+        # #region agent log
+        try:
+            import json
+            import time
+            from pathlib import Path
+            _log = Path(__file__).resolve().parents[4] / "debug-48a3e2.log"
+            payload = {
+                "sessionId": "48a3e2",
+                "hypothesisId": "H3",
+                "location": "transport_shift.sync_transport_security",
+                "message": "contract sync batch",
+                "data": {
+                    "contract_id": contract.id,
+                    "client": client.name if client else None,
+                    "rows": len(rows),
+                    "assigned_total": len(assigned_requests),
+                },
+                "timestamp": int(time.time() * 1000),
+            }
+            with _log.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        except OSError:
+            pass
+        # #endregion
+        skipped = contract_stats.get("skipped_no_plate", 0)
+        if skipped:
+            parse_stats[str(contract.id)] = contract_stats
+            samples = contract_stats.get("skipped_samples") or []
+            sample_txt = "; ".join(samples[:3])
+            warnings.append(
+                f"Клиент «{client.name if client else contract.id}»: {skipped} заявок без "
+                f"распознанного госномера"
+                + (f" (например: {sample_txt})" if sample_txt else "")
+            )
         for item in rows:
+            if item.request_id in assigned_requests:
+                continue
             _upsert_security_vehicle(
                 contract_id=contract.id,
                 warehouse_id=warehouse_id,
@@ -342,16 +445,41 @@ def sync_transport_security(user: dict, warehouse_id: int, day: date) -> dict:
                 security_request_id=item.request_id,
                 vehicle_number=item.vehicle_number,
             )
+            assigned_requests.add(item.request_id)
             total += 1
         details.append({
             "contract_id": contract.id,
+            "client_name": client.name if client else "",
             "fetched": len(rows),
+            "skipped_no_plate": skipped,
         })
 
     db.session.commit()
+
+    message = None
+    if total == 0:
+        if "unauthorized" in sources or "no_auth" in sources:
+            message = (
+                "Нет SSO-сессии портала охраны. Войдите на https://security.bsh-ru.ru в Yandex "
+                "(доменная учётка) и выполните: flask pls security-refresh-session"
+            )
+        elif "stub" in sources:
+            message = "Режим заглушки SECURITY_PORTAL_STUB — демо-заявки без портала."
+        else:
+            message = (
+                f"Заявок в портале: {len(prefetched)}, подходящих по клиенту и складу: 0. "
+                "Проверьте имя клиента и «Место визита СБ» у склада."
+            )
+    elif "mock_fallback" in sources or "stub" in sources:
+        message = "Загружены демо-данные охраны (портал недоступен или включена заглушка)."
+
     return {
         "synced": total,
         "source": ",".join(sorted(sources)),
+        "raw_rows": len(prefetched),
         "details": details,
+        "warnings": warnings,
+        "parse_stats": parse_stats,
+        "message": message,
         "security": security_status(),
     }

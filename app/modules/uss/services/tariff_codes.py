@@ -12,6 +12,7 @@ STANDARD_BILLING_CODES = frozenset({
     "extra_vehicle_docs",
     "repack_units",
     "overtime_m3",
+    "custom_pallet",
     "inventory_hours",
     "elco_drain_hours",
     "valve_gluing",
@@ -32,6 +33,29 @@ AREA_LINE_CODES = frozenset({
     "storage_area",
 })
 
+# Краткие русские названия для выбора кода в каталоге ставок
+BILLING_LINE_SHORT_NAMES: dict[str, str] = {
+    "storage_area_fixed": "Хранение на площади (фикс)",
+    "storage_area_extra": "Хранение: доп. площадь",
+    "storage_area": "Хранение: занимаемая площадь",
+    "manual_m3": "Ручная обработка, м³",
+    "extra_manual_m3": "Доп. ручная обработка (поле ТС)",
+    "mechanized_m3": "Механизированная обработка, м³",
+    "vehicle_docs": "Пакет документов на машину",
+    "extra_vehicle_docs": "Доп. комплект документов (поле ТС)",
+    "repack_units": "Переупаковка",
+    "custom_pallet": "Паллетирование (доп. обработка), шт.",
+    "overtime_m3": "Сверхурочная обработка, м³",
+    "inventory_hours": "Инвентаризация, чел.ч.",
+    "elco_drain_hours": "Слив котлов ELCO, чел.ч.",
+    "valve_gluing": "Подклейка клапанов",
+    "vietnam_stickering": "Стикерование (Вьетнам)",
+    "flue_stickering": "Стикерование дымоходов",
+    "elco_passports": "Паспорта ELCO (на ТС)",
+    "extra_vehicle_docs_rf": "Доп. документы РФ (на ТС)",
+    "extra_vehicle_docs_rb": "Доп. документы РБ (на ТС)",
+}
+
 UNIT_BY_CODE = {
     "storage_area_fixed": "m2",
     "storage_area_extra": "m2",
@@ -43,6 +67,7 @@ UNIT_BY_CODE = {
     "vehicle_docs": "vehicle",
     "extra_vehicle_docs": "vehicle",
     "repack_units": "pcs",
+    "custom_pallet": "pcs",
     "inventory_hours": "hour",
     "elco_drain_hours": "hour",
 }
@@ -85,6 +110,10 @@ _NAME_RULES: list[tuple[tuple[str, ...], str]] = [
     (("пакет", "документ"), "vehicle_docs"),
     (("машин",), "vehicle_docs"),
     (("переупак",), "repack_units"),
+    (("паллет",), "custom_pallet"),
+    (("подклей", "клапан"), "valve_gluing"),
+    (("паспорт", "elco"), "elco_passports"),
+    (("паспорт", "элко"), "elco_passports"),
     (("сверхур",), "overtime_m3"),
     (("инвентариз",), "inventory_hours"),
     (("слив", "elco"), "elco_drain_hours"),

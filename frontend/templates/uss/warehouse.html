@@ -1,12 +1,24 @@
-{% extends "uss/base.html" %}
-{% block title %}Склад{% endblock %}
-{% block content %}
-  <h1>Складская смена</h1>
-  <p class="muted">Суточные допработы без привязки к ТС — поля из схемы договора.</p>
-  <p id="status" class="status">Загрузка…</p>
-  <div id="toolbar"></div>
-  <div id="content"></div>
-{% endblock %}
-{% block scripts %}
-  <script src="/static/js/uss_warehouse.js"></script>
-{% endblock %}
+{% extends "uss/base.html" %}
+
+{% block title %}Складская логистика{% endblock %}
+
+{% block content %}
+
+  <h1>Складская смена</h1>
+
+  <p class="muted">Суточные допработы без привязки к ТС — поля из схемы договора.</p>
+
+  <p id="status" class="status">Загрузка…</p>
+
+  <div id="toolbar"></div>
+
+  <div id="content"></div>
+
+{% endblock %}
+
+{% block scripts %}
+
+  <script src="/static/js/uss_warehouse.js"></script>
+
+{% endblock %}
+
