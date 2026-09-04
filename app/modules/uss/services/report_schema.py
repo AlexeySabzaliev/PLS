@@ -17,6 +17,7 @@ from app.modules.uss.services.tariff_quantity import (
     needs_manual_daily_input,
     needs_manual_inventory_input,
     needs_manual_vehicle_input,
+    unit_display_label,
 )
 from app.modules.uss.services.tariff_report import REPORT_ROLES, tariff_in_role_report
 
@@ -68,10 +69,10 @@ _EXTRA_DOC_FIELD = {
 def _vehicle_tariff_column(inp: dict) -> dict:
     """Колонка ручного тарифа на строке ТС (manual_vehicle)."""
     code = inp["billing_line_code"]
-    unit = (inp.get("unit_code") or "").strip()
+    unit_label = unit_display_label(inp.get("unit_code"), name=inp.get("unit_label"))
     label = inp.get("name") or code
-    if unit:
-        label = f"{label}, {unit}"
+    if unit_label:
+        label = f"{label}, {unit_label}"
     return {
         "field": f"rq_{code}",
         "label": label,
@@ -169,12 +170,13 @@ def _active_tariffs(
     )
     unit_ids = {r.unit_id for r in rows if r.unit_id}
     units = {
-        u.id: u.code
+        u.id: u
         for u in UnitOfMeasure.query.filter(UnitOfMeasure.id.in_(unit_ids)).all()
     } if unit_ids else {}
 
     result = []
     for r in rows:
+        unit = units.get(r.unit_id)
         result.append(
             apply_tariff_defaults({
                 "id": r.id,
@@ -190,7 +192,8 @@ def _active_tariffs(
                 "is_custom": r.is_custom,
                 "price_agreed": r.price_agreed,
                 "sort_order": r.sort_order or 0,
-                "unit_code": units.get(r.unit_id),
+                "unit_code": unit.code if unit else None,
+                "unit_label": unit.name if unit else None,
             })
         )
     return result
@@ -202,6 +205,7 @@ def _tariff_row(t: dict, *, input_kind: str) -> dict:
         "billing_line_code": t["billing_line_code"],
         "name": t["name"],
         "unit_code": t.get("unit_code"),
+        "unit_label": t.get("unit_label"),
         "quantity_source": effective_quantity_source(t),
         "rate_line_code": t.get("rate_line_code"),
         "quantity_divisor": t.get("quantity_divisor"),

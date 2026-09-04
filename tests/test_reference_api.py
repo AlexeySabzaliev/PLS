@@ -237,8 +237,8 @@ def test_tariff_rules_create_additional_manual(auth_client, client, app):
         "amendment_id": am.id,
         "name": "Подклейка клапанов (тест)",
         "unit_id": unit.id,
+        "accounting_kind": "daily_extra",
         "report_role": "transport_logistics",
-        "quantity_source": "manual_daily",
         "valid_from": date(2026, 8, 1).isoformat(),
         "rate_ex_vat": 210.04,
         "is_custom": True,
@@ -252,6 +252,7 @@ def test_tariff_rules_create_additional_manual(auth_client, client, app):
     assert body["is_custom"] is True
     assert body["report_role"] == "transport_logistics"
     assert body["quantity_source"] == "manual_daily"
+    assert body["accounting_kind"] == "daily_extra"
     assert body["rate_ex_vat"] == 210.04
 
     client.delete(f"/api/reference/tariff_rules/{body['id']}")
@@ -284,23 +285,38 @@ def test_tariff_rules_create_main_without_billing_code(auth_client, client, app)
     client.delete(f"/api/reference/tariff_rules/{resp.json['id']}")
 
 
-def test_reference_meta_billing_line_choices(auth_client, client):
-    """Каталог ставок: billing_line_code с русскими подписями в meta."""
+def test_reference_meta_tariff_fields_without_technical_codes(auth_client, client):
+    """Ставки: в meta нет технических полей (код строки, rate_line_code и т.д.)."""
     auth_client("admin@test.local", "admin")
     resp = client.get("/api/reference/meta")
     assert resp.status_code == 200
     tariff = next(c for c in resp.json["catalogs"] if c["code"] == "tariff_rules")
-    bl = next(f for f in tariff["field_meta"] if f["field"] == "billing_line_code")
-    assert bl["type"] == "select"
-    assert bl["choices"]
-    codes = {c["value"] for c in bl["choices"]}
+    field_names = {f["field"] for f in tariff["field_meta"]}
+    assert "billing_line_code" not in field_names
+    assert "rate_line_code" not in field_names
+    assert "quantity_divisor" not in field_names
+    assert "name" in field_names
+    assert "rate_ex_vat" in field_names
+    assert "report_role" in field_names
+    assert "accounting_kind" in field_names
+    assert "quantity_source" not in field_names
+    assert "report_scope" not in field_names
+    ak = next(f for f in tariff["field_meta"] if f["field"] == "accounting_kind")
+    assert any(c["value"] == "vehicle_extra" for c in ak["choices"])
+    assert any(c["value"] == "daily_extra" for c in ak["choices"])
+
+
+def test_reference_meta_billing_line_choices(auth_client, client):
+    """Справочник известных кодов биллинга доступен через billing_line_code_choices (не в UI)."""
+    from app.modules.uss.services.tariff_quantity import billing_line_code_choices
+
+    choices = billing_line_code_choices()
+    codes = {c["value"] for c in choices}
     assert "storage_area_fixed" in codes
     assert "manual_m3" in codes
-    fixed = next(c for c in bl["choices"] if c["value"] == "storage_area_fixed")
+    fixed = next(c for c in choices if c["value"] == "storage_area_fixed")
     assert "Хранение на площади (фикс)" in fixed["label"]
-    assert "auto_contract_param" in fixed["label"]
     assert fixed.get("unit_code") == "m2"
-    assert fixed.get("quantity_source") == "auto_contract_param"
 
 
 def test_warehouse_partial_update_preserves_security_visit_place(auth_client, client):

@@ -8,7 +8,7 @@
   const STATUS_FILTER_LABELS = {
     all: 'Все',
     active_contract: 'Договор действует',
-    active_amendment: 'ДС действует',
+    active_amendment: 'Доп. соглашение действует',
     expiring: 'Истекают скоро',
   };
 
@@ -17,6 +17,7 @@
     suspended: 'cr-status--warn',
     closed: 'cr-status--muted',
     draft: 'cr-status--muted',
+    expired: 'cr-status--expired',
   };
 
   const AMENDMENT_STATUS_CLASS = {
@@ -147,10 +148,17 @@
     let extra = '';
     if (row.expiring_soon && days !== null && days !== undefined) {
       extra = `<span class="cr-expiring">через ${days} дн.</span>`;
-    } else if (days !== null && days !== undefined && days < 0) {
-      extra = '<span class="cr-expired">истёк</span>';
     }
     return `${fmtDateRu(row.effective_to)}${extra ? ` ${extra}` : ''}`;
+  }
+
+  function renderContractStatus(row) {
+    const days = row.days_until_end;
+    if (days !== null && days !== undefined && days < 0) {
+      return statusBadge('Истёк', CONTRACT_STATUS_CLASS.expired);
+    }
+    const contractClass = CONTRACT_STATUS_CLASS[row.contract_status] || '';
+    return statusBadge(row.contract_status_label, contractClass);
   }
 
   function renderTable(clients) {
@@ -160,8 +168,8 @@
     }
 
     let html = '<table class="data-table cr-table"><thead><tr>';
-    html += '<th>Клиент</th><th>Договор</th><th>Статус дог.</th>';
-    html += '<th>ДС</th><th>Статус ДС</th><th>Действует с</th><th>Действует до</th>';
+    html += '<th>Клиент</th><th>Договор</th><th>Статус договора</th>';
+    html += '<th>Доп. соглашение</th><th>Статус доп. соглашения</th><th>Действует с</th><th>Действует до</th>';
     html += '</tr></thead><tbody>';
 
     clients.forEach((client) => {
@@ -169,12 +177,11 @@
         const clientCell = idx === 0
           ? `<td class="cr-client-cell" rowspan="${client.rows.length}">${row.client_name}</td>`
           : '';
-        const contractClass = CONTRACT_STATUS_CLASS[row.contract_status] || '';
         const amendmentClass = AMENDMENT_STATUS_CLASS[row.amendment_status] || 'cr-status--muted';
         html += '<tr' + (row.expiring_soon ? ' class="cr-row-expiring"' : '') + '>';
         html += clientCell;
         html += `<td>${row.contract_number || '—'}</td>`;
-        html += `<td>${statusBadge(row.contract_status_label, contractClass)}</td>`;
+        html += `<td>${renderContractStatus(row)}</td>`;
         html += `<td>${row.amendment_number ? `№${row.amendment_number}` : '<span class="muted">—</span>'}</td>`;
         html += `<td>${row.amendment_id ? statusBadge(row.amendment_status_label, amendmentClass) : '<span class="muted">—</span>'}</td>`;
         html += `<td>${fmtDateRu(row.effective_from)}</td>`;

@@ -1,4 +1,19 @@
 /** Общие утилиты UI смен УСС */
+const USS_UNIT_LABELS = {
+  m2: 'м²',
+  m3: 'м³',
+  pcs: 'шт.',
+  vehicle: 'маш.',
+  hour: 'ч',
+};
+
+function ussUnitLabel(inp) {
+  if (!inp) return '';
+  if (inp.unit_label) return inp.unit_label;
+  if (inp.unit_code && USS_UNIT_LABELS[inp.unit_code]) return USS_UNIT_LABELS[inp.unit_code];
+  return inp.unit_code || '';
+}
+
 const UssApi = {
   ERROR_MESSAGES: {
     forbidden: 'Нет доступа к этому разделу',
@@ -289,41 +304,64 @@ const UssApi = {
     });
   },
 
-  renderContractTabs(container, tabs) {
+  renderContractTabs(container, tabs, options = {}) {
     if (!tabs.length) return;
+    const initialIndex = Math.min(
+      Math.max(0, Number(options.initialIndex) || 0),
+      tabs.length - 1,
+    );
+    const onChange = typeof options.onChange === 'function' ? options.onChange : null;
     container.replaceChildren();
     const nav = document.createElement('div');
     nav.className = 'shift-tabs';
+    nav.setAttribute('role', 'tablist');
     const panels = document.createElement('div');
     panels.className = 'shift-tab-panels';
+    const panelEls = [];
 
-    const showTab = (index) => {
+    const showTab = (index, opts = {}) => {
+      const safeIndex = Math.min(Math.max(0, index), tabs.length - 1);
       nav.querySelectorAll('.shift-tab').forEach((b, i) => {
-        b.classList.toggle('active', i === index);
+        const active = i === safeIndex;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-selected', active ? 'true' : 'false');
       });
-      panels.querySelectorAll('.shift-tab-panel').forEach((panel, i) => {
-        const active = i === index;
-        panel.classList.toggle('hidden', !active);
-        if (active) {
+      panelEls.forEach((panel, i) => {
+        const active = i === safeIndex;
+        if (!active) {
+          panel.hidden = true;
           panel.replaceChildren();
-          tabs[i].render(panel);
+          return;
         }
+        panel.hidden = false;
+        panel.replaceChildren();
+        tabs[i].render(panel);
       });
+      if (!opts.silent && onChange) onChange(safeIndex, tabs[safeIndex]);
     };
 
     tabs.forEach((tab, i) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = `shift-tab${i === 0 ? ' active' : ''}`;
+      btn.className = `shift-tab${i === initialIndex ? ' active' : ''}`;
       btn.textContent = tab.label;
-      btn.addEventListener('click', () => showTab(i));
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-selected', i === initialIndex ? 'true' : 'false');
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        showTab(i);
+      });
       nav.appendChild(btn);
       const panel = document.createElement('div');
-      panel.className = `shift-tab-panel${i === 0 ? '' : ' hidden'}`;
+      panel.className = 'shift-tab-panel';
+      panel.setAttribute('role', 'tabpanel');
+      panel.hidden = i !== initialIndex;
       panels.appendChild(panel);
+      panelEls.push(panel);
     });
     container.append(nav, panels);
-    showTab(0);
+    showTab(initialIndex, { silent: true });
   },
 
   uniqueContracts(contracts) {
@@ -397,7 +435,8 @@ const UssApi = {
       const code = inp.billing_line_code;
       const row = document.createElement('label');
       row.className = 'field-row';
-      const unit = inp.unit_code ? ` (${inp.unit_code})` : '';
+      const unitLbl = ussUnitLabel(inp);
+      const unit = unitLbl ? ` (${unitLbl})` : '';
       row.innerHTML = `<span>${inp.name || code}${unit}</span>`;
       const el = document.createElement('input');
       el.type = 'number';
@@ -429,88 +468,6 @@ const UssApi = {
     return form;
   },
 
-  _renderVehicleExtrasTable(body, vInputs, vehicleExtras) {
-    const {
-      vehicles = [],
-      vehicleLabelFn,
-      onSave,
-    } = vehicleExtras;
-    const labelFn = vehicleLabelFn || ((v) => {
-      const parts = [v.tractor_plate, v.trailer_plate].filter(Boolean);
-      return parts.length ? parts.join(' / ') : 'ТС';
-    });
-    const saved = vehicles.filter((v) => v.id);
-    if (!saved.length) {
-      const empty = document.createElement('p');
-      empty.className = 'muted';
-      empty.textContent = 'Нет сохранённых ТС — сначала добавьте и сохраните машины на вкладке «ТС».';
-      body.appendChild(empty);
-      return;
-    }
-    const wrap = document.createElement('div');
-    wrap.className = 'transport-table-wrap vehicle-extras-table-wrap';
-    const table = document.createElement('table');
-    table.className = 'data-table vehicle-extras-table';
-    const thead = document.createElement('thead');
-    const hr = document.createElement('tr');
-    const thVehicle = document.createElement('th');
-    thVehicle.textContent = 'Тягач';
-    thVehicle.className = 'col-plate';
-    hr.appendChild(thVehicle);
-    vInputs.forEach((inp) => {
-      const th = document.createElement('th');
-      const unit = inp.unit_code ? ` (${inp.unit_code})` : '';
-      th.textContent = `${inp.name}${unit}`;
-      th.title = inp.name;
-      hr.appendChild(th);
-    });
-    const thAct = document.createElement('th');
-    thAct.className = 'col-actions';
-    hr.appendChild(thAct);
-    thead.appendChild(hr);
-    table.appendChild(thead);
-    const tbody = document.createElement('tbody');
-    saved.forEach((vehicle) => {
-      const rq = vehicle.report_quantities || {};
-      const tr = document.createElement('tr');
-      const rqInputs = {};
-      const tdLabel = document.createElement('td');
-      tdLabel.className = 'col-plate vehicle-extras-label';
-      tdLabel.textContent = labelFn(vehicle);
-      tr.appendChild(tdLabel);
-      vInputs.forEach((inp) => {
-        const td = document.createElement('td');
-        const el = document.createElement('input');
-        el.type = 'number';
-        el.min = '0';
-        el.step = '1';
-        el.value = rq[inp.billing_line_code] ?? '';
-        rqInputs[inp.billing_line_code] = el;
-        td.appendChild(el);
-        tr.appendChild(td);
-      });
-      const tdBtn = document.createElement('td');
-      tdBtn.className = 'col-actions';
-      const save = document.createElement('button');
-      save.type = 'button';
-      save.textContent = 'Сохранить';
-      save.addEventListener('click', async () => {
-        const report_quantities = {};
-        Object.keys(rqInputs).forEach((code) => {
-          const v = rqInputs[code].value;
-          if (v !== '') report_quantities[code] = Number(v);
-        });
-        await onSave(vehicle.id, report_quantities);
-      });
-      tdBtn.appendChild(save);
-      tr.appendChild(tdBtn);
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    wrap.appendChild(table);
-    body.appendChild(wrap);
-  },
-
   _renderInventoryDailyFields(body, schema, areaEntries, extraEntries, onSave, options = {}) {
     const areas = schema?.inventory_areas || [];
     const extras = schema?.inventory_extra || [];
@@ -529,7 +486,8 @@ const UssApi = {
       const store = inp.bucket === 'area' ? areaEntries : extraEntries;
       const row = document.createElement('label');
       row.className = 'field-row';
-      const unit = inp.unit_code ? ` (${inp.unit_code})` : '';
+      const unitLbl = ussUnitLabel(inp);
+      const unit = unitLbl ? ` (${unitLbl})` : '';
       row.innerHTML = `<span>${inp.name || code}${unit}</span>`;
       const el = document.createElement('input');
       el.type = 'number';
@@ -566,22 +524,15 @@ const UssApi = {
       schema = {},
       totals = {},
       onPeriodSave,
-      vehicleExtras = null,
       inventory = null,
       readOnly = false,
     } = options;
     const periodInputs = schema.period_inputs || [];
-    const vInputs = schema.vehicle_inputs || [];
     const hasPeriod = periodInputs.length > 0 && typeof onPeriodSave === 'function';
-    const hasVehicle = vInputs.length > 0 && vehicleExtras;
     const hasInventory = inventory && (
       (schema.inventory_areas || []).length || (schema.inventory_extra || []).length
     );
     container.innerHTML = '';
-    if (!hasPeriod && !hasVehicle && !hasInventory) {
-      container.innerHTML = '<p class="muted">Нет полей суточного отчёта по схеме договора.</p>';
-      return;
-    }
     const root = document.createElement('div');
     root.className = 'uss-daily-report';
     const title = document.createElement('h3');
@@ -601,13 +552,15 @@ const UssApi = {
         readOnly,
       });
       sections.appendChild(section);
-    }
-    if (hasVehicle) {
+    } else if (typeof onPeriodSave === 'function') {
       const { section, body } = this._dailyReportSection(
-        'По транспорту',
-        'Дополнительные тарифицируемые поля по каждому ТС.',
+        'Итоги за день',
+        'Допуслуги без привязки к ТС — итог за день по договору.',
       );
-      this._renderVehicleExtrasTable(body, vInputs, vehicleExtras);
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'Нет полей итога за день по этому ДС. Проверьте ставки со способом «Итог за день» в справочнике.';
+      body.appendChild(empty);
       sections.appendChild(section);
     }
     if (hasInventory) {
@@ -626,6 +579,12 @@ const UssApi = {
       sections.appendChild(section);
     }
     root.appendChild(sections);
+    if (!hasPeriod && !hasInventory && typeof onPeriodSave !== 'function') {
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'Нет полей суточного отчёта по схеме договора.';
+      root.appendChild(empty);
+    }
     container.appendChild(root);
   },
 
@@ -651,27 +610,34 @@ const UssApi = {
     });
   },
 
-  async showVehicleAuditDialog(vehicleId) {
+  async showVehicleAuditDialog(vehicleId, options = {}) {
     const data = await this.json(`/api/uss/transport/vehicles/${vehicleId}/audit`);
     const dlg = document.createElement('dialog');
     dlg.className = 'audit-dialog';
     const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const plate = options.plate ? ` · ${esc(options.plate)}` : '';
     let rows = '';
     (data.items || []).forEach((item) => {
       const when = item.created_at ? item.created_at.replace('T', ' ').slice(0, 19) : '';
       const who = esc(item.user_name || '—');
       const action = esc(item.action_label || item.action);
-      let changes = '';
-      if (item.changes && Object.keys(item.changes).length) {
-        changes = '<ul class="audit-changes">' + Object.entries(item.changes).map(([k, v]) =>
-          `<li><code>${esc(k)}</code>: ${esc(v.old)} → ${esc(v.new)}</li>`,
+      const display = item.changes_display || [];
+      let body = '';
+      if (display.length) {
+        body = '<ul class="audit-changes">' + display.map((row) =>
+          `<li><span class="audit-field">${esc(row.label)}</span>: `
+          + `<span class="audit-old">${esc(row.old)}</span> → `
+          + `<span class="audit-new">${esc(row.new)}</span></li>`,
         ).join('') + '</ul>';
+      } else if (item.summary) {
+        body = `<p class="audit-summary">${esc(item.summary)}</p>`;
       }
-      rows += `<li class="audit-entry"><div class="audit-entry-head"><strong>${action}</strong> · ${who} · <span class="muted">${when}</span></div>${changes}</li>`;
+      rows += `<li class="audit-entry"><div class="audit-entry-head"><strong>${action}</strong> · ${who}<br><span class="muted audit-when">${when}</span></div>${body}</li>`;
     });
     dlg.innerHTML = `
       <form method="dialog" class="audit-dialog-form">
-        <h3>История изменений</h3>
+        <h3>Журнал строки ТС${plate}</h3>
+        <p class="muted audit-dialog-lead">Хронология действий и изменений по этой строке.</p>
         ${rows ? `<ol class="audit-list">${rows}</ol>` : '<p class="muted">Записей пока нет.</p>'}
         <div class="access-form-actions"><button type="submit" class="ref-btn ref-btn--primary">Закрыть</button></div>
       </form>`;
@@ -795,7 +761,8 @@ const UssApi = {
       const store = inp.bucket === 'area' ? areaEntries : extraEntries;
       const row = document.createElement('label');
       row.className = 'field-row';
-      const unit = inp.unit_code ? ` (${inp.unit_code})` : '';
+      const unitLbl = ussUnitLabel(inp);
+      const unit = unitLbl ? ` (${unitLbl})` : '';
       row.innerHTML = `<span>${inp.name || code}${unit}</span>`;
       const el = document.createElement('input');
       el.type = 'number';

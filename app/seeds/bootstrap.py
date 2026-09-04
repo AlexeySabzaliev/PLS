@@ -256,7 +256,10 @@ def seed_admin(*, verbose: bool = False) -> dict:
 
 def seed_demo(*, verbose: bool = False) -> dict:
     """Демо: Аристон / Стрельна / август 2026 (из эталонного Excel Billings)."""
+    from app.seeds.fix_ariston_canonical import fix_ariston_canonical
+
     seed_admin(verbose=False)
+    fix_ariston_canonical(dry_run=False, with_ds5=True)
     stats = seed_ariston_strelna_august(verbose=verbose)
     if verbose:
         print(f"seed-demo: {stats}")

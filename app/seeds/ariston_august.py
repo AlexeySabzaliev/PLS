@@ -20,14 +20,66 @@ from app.modules.uss.models import OperationDailyTotal, ShiftReport, VehicleOper
 from app.modules.uss.services.shift_handling import infer_handling_from_volumes
 from app.modules.uss.services.transport_waybills import replace_waybills
 from app.modules.uss.services.vehicle_plates import combine_vehicle_plates, parse_vehicle_plates
-from app.seeds.ariston_tariffs import ensure_ariston_billing_rates, ensure_ariston_tariffs
-from app.seeds.billing_excel_ref import read_billing_reference, read_prr_rows
+from app.modules.reference.client_names import CANONICAL_ARISTON_CLIENT
+from app.seeds.fix_ariston_canonical import (
+    BILLING_CONFIG,
+    CANONICAL_CONTRACT_NUMBER,
+    CANONICAL_DS_NUMBER,
+    CANONICAL_WH_CODE,
+    WRONG_CONTRACT_NUMBER,
+    purge_legacy_ariston_seed_data,
+)
+from app.seeds.ariston_tariffs import ensure_ariston_billing_rates, sync_ariston_tariff_specs
+from app.seeds.billing_excel_ref import (
+    assert_august_2026_canonical_billing,
+    assert_prr_matches_billing,
+    dedupe_prr_rows,
+    read_billing_reference,
+    read_prr_rows,
+)
 
-CONTRACT_NUMBER = "STR-OH-ARISTON"
-AMENDMENT_NUMBER = "ДС-01/2025"
-WAREHOUSE_CODE = "strelna"
+WAREHOUSE_CODE = CANONICAL_WH_CODE
 YEAR = 2026
 MONTH = 8
+
+
+def resolve_ariston_canonical_contract() -> tuple[Client, Contract, ContractAmendment]:
+    """Канонический договор Аристон (АР-БСХ 24 / ДС-6/2024). Не создаёт левые STR-OH-ARISTON."""
+    if Contract.query.filter_by(number=WRONG_CONTRACT_NUMBER).first():
+        purge_legacy_ariston_seed_data()
+    if Contract.query.filter_by(number=WRONG_CONTRACT_NUMBER).first():
+        raise RuntimeError(
+            f"В БД остался ошибочный договор {WRONG_CONTRACT_NUMBER}. "
+            "Выполните: flask pls fix-ariston-canonical"
+        )
+
+    client = Client.query.filter_by(name=CANONICAL_ARISTON_CLIENT, is_active=True).first()
+    wh = Warehouse.query.filter_by(code=CANONICAL_WH_CODE).first()
+    if not client or not wh:
+        raise RuntimeError(
+            "Нет канонического клиента/склада Аристон. Выполните: flask pls fix-ariston-canonical"
+        )
+
+    contract = Contract.query.filter(
+        Contract.number.ilike(f"%{CANONICAL_CONTRACT_NUMBER}%"),
+        Contract.warehouse_id == wh.id,
+        Contract.status == "active",
+    ).first()
+    if not contract:
+        raise RuntimeError(
+            f"Нет договора {CANONICAL_CONTRACT_NUMBER}. Выполните: flask pls fix-ariston-canonical"
+        )
+
+    am = ContractAmendment.query.filter_by(
+        contract_id=contract.id,
+        number=CANONICAL_DS_NUMBER,
+    ).first()
+    if not am:
+        raise RuntimeError(
+            f"Нет ДС {CANONICAL_DS_NUMBER} на договоре {contract.number}. "
+            "Выполните: flask pls fix-ariston-canonical"
+        )
+    return client, contract, am
 
 
 def resolve_august_excel_path() -> Path | None:
@@ -41,8 +93,8 @@ def resolve_august_excel_path() -> Path | None:
     if candidate.is_file():
       return candidate
   for candidate in (
-    Path(r"D:\Billings\backend\tests\fixtures\august\Ariston billing 08.2026.xlsx"),
     Path(__file__).resolve().parents[2] / "tests/fixtures/ariston_billing/Ariston billing 08.2026.xlsx",
+    Path(r"D:\Billings\backend\tests\fixtures\august\Ariston billing 08.2026.xlsx"),
   ):
     if candidate.is_file():
       return candidate
@@ -213,6 +265,9 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
     "daily_lines": 0,
     "shift_days": 0,
     "billing_total": None,
+    "prr_deduped": 0,
+    "prr_manual_m3": None,
+    "prr_mechanized_m3": None,
   }
 
   path = excel_path or resolve_august_excel_path()
@@ -228,42 +283,14 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
   if not wh or not pt:
     raise RuntimeError("Сначала flask pls seed-reference")
 
-  client = Client.query.filter_by(name="Аристон").first()
-  if not client:
-    client = Client(name="Аристон", is_active=True)
-    db.session.add(client)
-    db.session.flush()
+  client, contract, am = resolve_ariston_canonical_contract()
 
-  contract = Contract.query.filter_by(number=CONTRACT_NUMBER, warehouse_id=wh.id).first()
-  if not contract:
-    contract = Contract(
-      client_id=client.id,
-      warehouse_id=wh.id,
-      product_type_id=pt.id,
-      number=CONTRACT_NUMBER,
-      status="active",
-    )
-    db.session.add(contract)
-    db.session.flush()
-
-  am = ContractAmendment.query.filter_by(contract_id=contract.id, number=AMENDMENT_NUMBER).first()
-  if not am:
-    am = ContractAmendment(
-      contract_id=contract.id,
-      number=AMENDMENT_NUMBER,
-      status="active",
-      effective_from=date(2025, 6, 1),
-    )
-    db.session.add(am)
-    db.session.flush()
-
-  ensure_ariston_tariffs(contract.id, am.id, valid_from=date(2025, 6, 1))
+  sync_ariston_tariff_specs(contract.id, am.id)
   ensure_ariston_billing_rates(contract.id)
 
   contract.billing_config = {
-    "area_mode": "two_tier",
-    "fixed_m2days": 9435,
-    "fixed_storage_m2days": 9435,
+    **BILLING_CONFIG,
+    "fixed_storage_m2days": BILLING_CONFIG.get("fixed_m2days", 9435),
   }
 
   line = ProcessLine.query.filter_by(code="ariston_standard").first()
@@ -288,11 +315,19 @@ def seed_ariston_strelna_august(*, verbose: bool = False, excel_path: Path | Non
   billing_lines, billing_total, _two_tier = read_billing_reference(path, MONTH)
   stats["billing_total"] = str(billing_total) if billing_total else None
 
+  assert_august_2026_canonical_billing(path)
+  prr_manual, prr_mech = assert_prr_matches_billing(path, MONTH)
+  stats["prr_manual_m3"] = str(prr_manual)
+  stats["prr_mechanized_m3"] = str(prr_mech)
+
   _clear_august_ops(contract.id, wh.id)
+
+  prr_rows, deduped = dedupe_prr_rows(read_prr_rows(path))
+  stats["prr_deduped"] = deduped
 
   op_days: list[date] = []
   by_waybill_day: dict[tuple[date, str], VehicleOperation] = {}
-  for raw in read_prr_rows(path):
+  for raw in prr_rows:
     day = _to_date(raw.get("operation_date"))
     if not day or day.month != MONTH:
       continue

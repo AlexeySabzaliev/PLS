@@ -84,6 +84,7 @@ def vehicle_operation_to_billing_dict(row: VehicleOperation, *, work_day_end=Non
         "volume_document_m3": row.volume_document_m3,
         "extra_handling_m3": row.extra_handling_m3,
         "extra_document_set_qty": row.extra_document_set_qty,
+        "billing_document_qty": row.billing_document_qty or 1,
         "inbound_manual_m3": rq.get("inbound_manual_m3", 0),
         "outbound_manual_m3": rq.get("outbound_manual_m3", 0),
         "inbound_mech_m3": rq.get("inbound_mech_m3", 0),

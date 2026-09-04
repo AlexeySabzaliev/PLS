@@ -222,6 +222,7 @@ def register_cli(app: Flask) -> None:
     def cmd_seed_ariston_august():
         """Импорт августа Аристон (Стрельна) из Excel Billings."""
         seed_admin(verbose=False)
+        fix_ariston_canonical(dry_run=False, with_ds5=True)
         seed_ariston_strelna_august(verbose=True)
 
     @pls_group.command("db-check")

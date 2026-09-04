@@ -142,20 +142,6 @@
 
     </div>
 
-
-
-    {% if user.role_codes %}
-
-    <p class="uss-intro-foot muted">
-
-      {{ user.email }}
-
-      <span class="uss-intro-roles">{{ user.role_codes | join(', ') }}</span>
-
-    </p>
-
-    {% endif %}
-
   </section>
 
 {% endblock %}

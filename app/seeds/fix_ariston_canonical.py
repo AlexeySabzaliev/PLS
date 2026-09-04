@@ -30,7 +30,12 @@ from app.modules.uss.models import (
     WarehouseStaffPositionVersion,
 )
 from app.modules.uss.services.tariff_codes import formula_for_code
-from app.seeds.ariston_tariffs import ARISTON_TARIFF_SPECS, AristonTariffSpec
+from app.seeds.ariston_tariffs import (
+    ARISTON_DS6_EXTRA_CODES,
+    ARISTON_TARIFF_SPECS,
+    AristonTariffSpec,
+    ariston_spec_by_code,
+)
 
 CANONICAL_CLIENT_NAME = CANONICAL_ARISTON_CLIENT
 WRONG_CLIENT_NAMES = frozenset({"Аристон"})
@@ -60,20 +65,12 @@ DS6_CORE_CODES = frozenset({
     "inventory_hours",
 })
 
-DS6_EXTRA_CODES = frozenset({
-    "extra_vehicle_docs_rf",
-    "extra_vehicle_docs_rb",
-    "elco_passports",
-    "elco_drain_hours",
-    "valve_gluing",
-    "vietnam_stickering",
-    "flue_stickering",
-})
+DS6_EXTRA_CODES = ARISTON_DS6_EXTRA_CODES
 
-# Канонический набор ставок ДС-6/2024 (без legacy extra_vehicle_docs)
+# Канонический набор ставок ДС-6/2024
 CANONICAL_DS6_TARIFF_CODES = DS6_CORE_CODES | DS6_EXTRA_CODES
 
-REDUNDANT_DS6_CODES = frozenset({"extra_vehicle_docs"})
+REDUNDANT_DS6_CODES = frozenset()
 
 
 @dataclass
@@ -87,10 +84,7 @@ class FixReport:
 
 
 def _spec_by_code(code: str) -> AristonTariffSpec | None:
-    for spec in ARISTON_TARIFF_SPECS:
-        if spec.billing_line_code == code:
-            return spec
-    return None
+    return ariston_spec_by_code(code)
 
 
 def _rate_for_code(code: str, *, extra_area_rate: str) -> str:
@@ -131,8 +125,15 @@ def _ensure_client(report: FixReport) -> Client:
                     )
                 report.log(f"Перенесено {count} {model.__tablename__}.{field}: {wrong.id} -> {canonical.id}")
         if not report.dry_run:
-            wrong.is_active = False
-        report.log(f"Деактивирован дубль клиента «{wrong_name}» id={wrong.id}")
+            remaining = Contract.query.filter_by(client_id=wrong.id).count()
+            if remaining == 0:
+                db.session.delete(wrong)
+                report.log(f"Удалён ошибочный клиент «{wrong_name}» id={wrong.id}")
+            else:
+                wrong.is_active = False
+                report.log(f"Деактивирован дубль клиента «{wrong_name}» id={wrong.id} (остались договоры: {remaining})")
+        else:
+            report.log(f"Удалить/деактивировать дубль клиента «{wrong_name}» id={wrong.id}")
     return canonical
 
 
@@ -169,6 +170,81 @@ def _ensure_warehouse(report: FixReport) -> Warehouse:
     return canonical
 
 
+
+
+def _delete_amendment_tree(report: FixReport, amd: ContractAmendment) -> None:
+    if not report.dry_run:
+        TariffRule.query.filter_by(amendment_id=amd.id).delete(synchronize_session=False)
+        db.session.delete(amd)
+    report.log(f"Удалено ошибочное ДС id={amd.id} №{amd.number}")
+
+
+def _remove_wrong_contract(report: FixReport, wrong: Contract, canonical_contract: Contract) -> None:
+    _reassign_operation_daily_totals(
+        report,
+        from_contract_id=wrong.id,
+        to_contract_id=canonical_contract.id,
+    )
+    for model in (VehicleOperation, BillingPeriod):
+        count = model.query.filter_by(contract_id=wrong.id).count()
+        if count:
+            if not report.dry_run:
+                db.session.execute(
+                    update(model).where(model.contract_id == wrong.id).values(contract_id=canonical_contract.id)
+                )
+            report.log(
+                f"Перенесено {count} {model.__tablename__}.contract_id: {wrong.id} -> {canonical_contract.id}"
+            )
+    for amd in ContractAmendment.query.filter_by(contract_id=wrong.id).all():
+        _delete_amendment_tree(report, amd)
+    if not report.dry_run:
+        TariffRule.query.filter_by(contract_id=wrong.id).delete(synchronize_session=False)
+        db.session.delete(wrong)
+    report.log(f"Удалён ошибочный договор {wrong.number} id={wrong.id}")
+
+
+def purge_legacy_ariston_seed_data(
+    *,
+    dry_run: bool = False,
+    canonical_contract: Contract | None = None,
+) -> FixReport:
+    """Удалить ошибочные сиды: клиент «Аристон», STR-OH-ARISTON, ДС-01/2025."""
+    report = FixReport(dry_run=dry_run)
+    if canonical_contract is None:
+        canonical_contract = Contract.query.filter(
+            Contract.number.ilike(f"%{CANONICAL_CONTRACT_NUMBER}%")
+        ).first()
+
+    for wrong in list(Contract.query.filter_by(number=WRONG_CONTRACT_NUMBER).all()):
+        if canonical_contract and wrong.id != canonical_contract.id:
+            _remove_wrong_contract(report, wrong, canonical_contract)
+        elif not canonical_contract:
+            for amd in ContractAmendment.query.filter_by(contract_id=wrong.id).all():
+                _delete_amendment_tree(report, amd)
+            if not report.dry_run:
+                TariffRule.query.filter_by(contract_id=wrong.id).delete(synchronize_session=False)
+                db.session.delete(wrong)
+            report.log(f"Удалён ошибочный договор {wrong.number} id={wrong.id}")
+
+    for amd in list(ContractAmendment.query.filter_by(number=WRONG_DS_NUMBER).all()):
+        _delete_amendment_tree(report, amd)
+
+    canonical_client = Client.query.filter_by(name=CANONICAL_CLIENT_NAME).first()
+    for wrong_name in WRONG_CLIENT_NAMES:
+        for cl in Client.query.filter_by(name=wrong_name).all():
+            if canonical_client and cl.id == canonical_client.id:
+                continue
+            if Contract.query.filter_by(client_id=cl.id).first():
+                continue
+            if not report.dry_run:
+                db.session.delete(cl)
+            report.log(f"Удалён ошибочный клиент «{wrong_name}» id={cl.id}")
+
+    if not dry_run:
+        db.session.commit()
+    else:
+        db.session.rollback()
+    return report
 
 
 def _reassign_operation_daily_totals(
@@ -238,33 +314,7 @@ def _ensure_contract(report: FixReport, client: Client, warehouse: Warehouse) ->
 
     wrong = Contract.query.filter_by(number=WRONG_CONTRACT_NUMBER).first()
     if wrong and wrong.id != contract.id:
-        _reassign_operation_daily_totals(
-            report,
-            from_contract_id=wrong.id,
-            to_contract_id=contract.id,
-        )
-        for model in (VehicleOperation, BillingPeriod, TariffRule, ContractAmendment):
-            count = model.query.filter_by(contract_id=wrong.id).count()
-            if count and model is not ContractAmendment and model is not TariffRule:
-                if not report.dry_run:
-                    db.session.execute(
-                        update(model).where(model.contract_id == wrong.id).values(contract_id=contract.id)
-                    )
-                report.log(
-                    f"Перенесено {count} {model.__tablename__}.contract_id: {wrong.id} -> {contract.id}"
-                )
-        wrong_amds = ContractAmendment.query.filter_by(contract_id=wrong.id).all()
-        for amd in wrong_amds:
-            if not report.dry_run:
-                amd.status = "superseded"
-                if amd.number == WRONG_DS_NUMBER:
-                    amd.effective_to = amd.effective_to or HISTORICAL_DS_TO
-            report.log(f"ДС id={amd.id} №{amd.number} на STR-OH-ARISTON -> superseded")
-            TariffRule.query.filter_by(amendment_id=amd.id).delete(synchronize_session=False)
-            report.log(f"Удалены ставки ДС id={amd.id}")
-        if not report.dry_run:
-            wrong.status = "closed"
-        report.log(f"Договор {WRONG_CONTRACT_NUMBER} id={wrong.id} -> closed")
+        _remove_wrong_contract(report, wrong, contract)
     return contract
 
 
@@ -331,11 +381,7 @@ def _ensure_tariffs(
             amendment_id=amendment.id,
             billing_line_code=code,
         ).first()
-        is_custom = spec.is_custom or code in {
-            "extra_vehicle_docs_rf",
-            "extra_vehicle_docs_rb",
-            "elco_passports",
-        }
+        is_custom = code in DS6_EXTRA_CODES
         if not row:
             if report.dry_run:
                 report.log(f"  + ставка {code} ({rate}) is_custom={is_custom}")
@@ -385,6 +431,31 @@ def _ensure_tariffs(
                 if not report.dry_run:
                     row.amendment_id = amendment.id
                 updates.append(f"amendment_id={amendment.id}")
+            if spec.name and row.name != spec.name:
+                if not report.dry_run:
+                    row.name = spec.name
+                updates.append("name")
+            if row.report_role != spec.report_role:
+                if not report.dry_run:
+                    row.report_role = spec.report_role
+                updates.append(f"report_role={spec.report_role}")
+            if row.report_scope != spec.report_scope:
+                if not report.dry_run:
+                    row.report_scope = spec.report_scope
+                updates.append(f"report_scope={spec.report_scope}")
+            if row.quantity_source != spec.quantity_source:
+                if not report.dry_run:
+                    row.quantity_source = spec.quantity_source
+                updates.append(f"quantity_source={spec.quantity_source}")
+            if row.rate_line_code != spec.rate_line_code:
+                if not report.dry_run:
+                    row.rate_line_code = spec.rate_line_code
+                updates.append(f"rate_line_code={spec.rate_line_code}")
+            expected_divisor = Decimal(spec.quantity_divisor)
+            if row.quantity_divisor != expected_divisor:
+                if not report.dry_run:
+                    row.quantity_divisor = expected_divisor
+                updates.append(f"quantity_divisor={spec.quantity_divisor}")
             if updates:
                 report.log(f"  ~ ставка {code}: {', '.join(updates)}")
                 touched += 1
@@ -471,7 +542,7 @@ def fix_ariston_canonical(*, dry_run: bool = False, with_ds5: bool = True, force
         number=CANONICAL_DS_NUMBER,
         effective_from=CANONICAL_DS_FROM,
         effective_to=None,
-        status="draft",
+        status="active",
     )
     n6 = _ensure_tariffs(
         report,
@@ -485,13 +556,7 @@ def fix_ariston_canonical(*, dry_run: bool = False, with_ds5: bool = True, force
     report.log(f"ДС-6/2024: {n6} ставок (extra_area=24)")
     _supersede_duplicate_ds6(report, contract, ds6)
     _trim_canonical_tariffs(report, contract, ds6)
-
-    # Деактивировать чужие ДС-01 на каноническом договоре, если остались
-    for amd in ContractAmendment.query.filter_by(contract_id=contract.id, number=WRONG_DS_NUMBER).all():
-        if not report.dry_run:
-            amd.status = "superseded"
-        TariffRule.query.filter_by(amendment_id=amd.id).delete(synchronize_session=False)
-        report.log(f"Отключено ошибочное ДС {WRONG_DS_NUMBER} id={amd.id} на {CANONICAL_CONTRACT_NUMBER}")
+    purge_legacy_ariston_seed_data(dry_run=dry_run, canonical_contract=contract)
 
     if not dry_run:
         db.session.commit()

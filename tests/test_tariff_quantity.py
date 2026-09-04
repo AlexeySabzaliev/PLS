@@ -9,9 +9,18 @@ from app.modules.uss.services.tariff_quantity import (
     effective_quantity_source,
     needs_manual_inventory_input,
     needs_manual_vehicle_input,
+    resolve_tariff_quantity_source,
     resolve_tariff_period_quantity,
+    unit_display_label,
 )
 from app.modules.uss.services.tariff_report import tariff_in_role_report
+
+
+def test_unit_display_label():
+    assert unit_display_label("pcs") == "шт."
+    assert unit_display_label("pcs", name="шт.") == "шт."
+    assert unit_display_label("m3") == "м³"
+    assert unit_display_label(None) == ""
 
 
 def test_billing_line_code_choices_catalog():
@@ -21,6 +30,13 @@ def test_billing_line_code_choices_catalog():
     assert "Хранение на площади (фикс)" in fixed["label"]
     assert fixed["unit_code"] == "m2"
     assert fixed["quantity_source"] == "auto_contract_param"
+    rf = next(c for c in choices if c["value"] == "extra_vehicle_docs_rf")
+    assert "РФ" in rf["label"]
+    assert rf["quantity_source"] == "manual_vehicle"
+    assert rf["report_role"] == "transport_logistics"
+    rb = next(c for c in choices if c["value"] == "extra_vehicle_docs_rb")
+    assert "РБ" in rb["label"]
+    assert rb["report_scope"] == "vehicle"
 
 
 def test_storage_area_fixed_never_gets_report_role():
@@ -48,6 +64,43 @@ def test_standard_manual_m3_is_auto_vehicle():
     t = apply_tariff_defaults({"billing_line_code": "manual_m3"})
     assert effective_quantity_source(t) == "auto_vehicle"
     assert not needs_manual_vehicle_input(t)
+
+
+def test_resolve_tariff_quantity_source_manual_by_role():
+    assert resolve_tariff_quantity_source(
+        quantity_source="manual",
+        report_role="warehouse_logistics",
+        report_scope="period",
+        is_custom=True,
+    ) == "manual_daily"
+    assert resolve_tariff_quantity_source(
+        quantity_source="manual",
+        report_role="transport_logistics",
+        report_scope="vehicle",
+        is_custom=True,
+    ) == "manual_vehicle"
+    assert resolve_tariff_quantity_source(
+        quantity_source="manual",
+        report_role="inventory_management",
+        report_scope="period",
+        is_custom=True,
+    ) == "manual_inventory"
+
+
+def test_custom_tariff_keeps_user_transport_role():
+    """Доп. ставка: роль/место ввода из справочника не перетираются реестром кодов."""
+    t = apply_tariff_defaults({
+        "billing_line_code": "valve_gluing",
+        "name": "Подклейка клапанов",
+        "report_role": "transport_logistics",
+        "report_scope": "vehicle",
+        "quantity_source": "manual_vehicle",
+        "is_custom": True,
+    })
+    assert t["report_role"] == "transport_logistics"
+    assert t["report_scope"] == "vehicle"
+    assert effective_quantity_source(t) == "manual_vehicle"
+    assert tariff_in_role_report(t, "transport_logistics")
 
 
 def test_custom_vehicle_scope_is_manual_vehicle():
@@ -269,3 +322,13 @@ def test_tariff_in_role_report_includes_inventory_with_stale_daily_source():
     })
     assert tariff_in_role_report(t, "inventory_management")
     assert needs_manual_inventory_input(t)
+
+
+def test_vehicle_docs_sums_billing_document_qty():
+    from app.modules.uss.services.tariff_quantity import auto_vehicle_quantity
+
+    ops = [
+        {"operation_date": date(2026, 8, 1), "billing_document_qty": 3},
+        {"operation_date": date(2026, 8, 2), "billing_document_qty": 1},
+    ]
+    assert auto_vehicle_quantity("vehicle_docs", ops) == Decimal("4")

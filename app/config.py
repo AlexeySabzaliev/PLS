@@ -49,7 +49,7 @@ class Config:
     MODULE_UZNT_NAME = os.environ.get("MODULE_UZNT_NAME", "УЗнТ")
     MODULE_USS_NAME = os.environ.get("MODULE_USS_NAME", "УСС")
     # Версия статики/HTML — меняйте при правках фронта (сброс кэша браузера)
-    PLS_BUILD_ID = os.environ.get("PLS_BUILD_ID", "20260904l")
+    PLS_BUILD_ID = os.environ.get("PLS_BUILD_ID", "20260904p")
 
     _is_dev = os.getenv("FLASK_ENV", "development").lower() != "production"
     _sso_enabled_env = os.getenv("SSO_ENABLED")

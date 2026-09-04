@@ -26,12 +26,27 @@
   };
 
   const QUANTITY_SOURCE_LABELS = {
+    manual: 'Оператор вводит количество',
     auto_contract_param: 'Система: параметр договора',
-    auto_vehicle: 'Система: из транспорта',
-    manual_vehicle: 'Ручной ввод в строке ТС',
-    manual_daily: 'Ручной ввод: суточные допы',
-    manual_inventory: 'Ручной ввод: упр. запасами',
-    none: 'Не вводится',
+    auto_vehicle: 'Система: по таблице ТС',
+    manual_vehicle: 'Оператор вводит количество',
+    manual_daily: 'Оператор вводит количество',
+    manual_inventory: 'Оператор вводит количество',
+    none: 'Только биллинг',
+  };
+
+  const ACCOUNTING_KIND_HINTS = {
+    auto_contract: 'Площадь из ДС × дни периода × ставка. В смене не вводится.',
+    auto_vehicle: 'Объём/признак из записи ТС, сумма по типу в биллинге.',
+    vehicle_extra: 'Колонка в таблице машин (доп. комплекты, паспорта ELCO…).',
+    daily_extra: 'Итог за день без привязки к ТС (склад, упр. запасами).',
+  };
+
+  const ACCOUNTING_KIND_SHORT = {
+    auto_contract: 'Авто: ДС',
+    auto_vehicle: 'Авто: ТС',
+    vehicle_extra: 'На строке ТС',
+    daily_extra: 'Итог за день',
   };
 
   const TARIFF_HIDDEN_FIELDS = new Set(['contract_id', 'amendment_id', 'is_custom']);
@@ -79,18 +94,38 @@
     if (showAdvanced) return all;
     return all.filter((f) => {
       const m = cat.field_meta.find((x) => x.field === f);
-      return !m?.advanced;
+      return !m?.advanced && !m?.hidden;
     });
   }
 
-  function tariffTableFields(cat, { includeBillingLine = false } = {}) {
-    let fields = visibleFields(cat).filter((f) => !TARIFF_HIDDEN_FIELDS.has(f));
-    if (includeBillingLine && !fields.includes('billing_line_code')) {
-      const nameIdx = fields.indexOf('name');
-      const at = nameIdx >= 0 ? nameIdx + 1 : fields.length;
-      fields = [...fields.slice(0, at), 'billing_line_code', ...fields.slice(at)];
-    }
-    return fields;
+  function tariffTableFields(cat) {
+    return visibleFields(cat).filter((f) => !TARIFF_HIDDEN_FIELDS.has(f));
+  }
+
+  function tariffAccountingKind(row = {}) {
+    if (row.accounting_kind) return row.accounting_kind;
+    const qs = (row.quantity_source || '').trim();
+    const scope = (row.report_scope || '').trim();
+    if (qs === 'auto_contract_param') return 'auto_contract';
+    if (qs === 'auto_vehicle') return 'auto_vehicle';
+    if (qs === 'manual_vehicle' || scope === 'vehicle') return 'vehicle_extra';
+    return 'daily_extra';
+  }
+
+  function isIntrinsicAccounting(row = {}) {
+    if (row.is_custom) return false;
+    const kind = tariffAccountingKind(row);
+    return kind === 'auto_contract' || kind === 'auto_vehicle';
+  }
+
+  function fieldVisibleForRow(fm, row, tr) {
+    if (!fm?.show_when) return true;
+    const entries = Object.entries(fm.show_when);
+    return entries.every(([field, expected]) => {
+      const fromDom = tr?.querySelector(`[data-field="${field}"]`)?.value;
+      const actual = fromDom != null && fromDom !== '' ? fromDom : (row[field] ?? tariffAccountingKind(row));
+      return actual === expected;
+    });
   }
 
   function lookupOptions(lookupKey, row) {
@@ -159,9 +194,15 @@
       const unit = (lookups.units || []).find((u) => u.code === choice.unit_code);
       if (unit) setSelect('unit_id', unit.id);
     }
-    if (choice.quantity_source) setSelect('quantity_source', choice.quantity_source);
+    if (choice.quantity_source) {
+      const qs = choice.quantity_source;
+      let kind = 'daily_extra';
+      if (qs === 'auto_contract_param') kind = 'auto_contract';
+      else if (qs === 'auto_vehicle') kind = 'auto_vehicle';
+      else if (qs === 'manual_vehicle') kind = 'vehicle_extra';
+      setSelect('accounting_kind', kind);
+    }
     if (choice.report_role) setSelect('report_role', choice.report_role);
-    if (choice.report_scope) setSelect('report_scope', choice.report_scope);
   }
 
   function bindBillingLineCodeHandlers() {
@@ -174,31 +215,72 @@
   }
 
   function displayReportRole(fm, row) {
+    const kind = tariffAccountingKind(row);
+    if (kind === 'auto_contract' || kind === 'auto_vehicle') {
+      return '<span class="ref-system-badge">Система</span>';
+    }
+    if (kind === 'vehicle_extra') {
+      return esc(ROLE_LABELS.transport_logistics);
+    }
     const val = row.report_role;
     if (val) {
       const label = choiceLabel(fm, val) || ROLE_LABELS[val];
       if (label) return esc(label);
     }
-    const qs = (row.quantity_source || '').trim();
-    if (qs === 'auto_contract_param' || qs === 'auto_vehicle' || qs === 'none') {
-      const label = QUANTITY_SOURCE_LABELS[qs];
-      if (label) return `<span class="ref-auto-badge">${esc(label)}</span>`;
+    return '<span class="muted">—</span>';
+  }
+
+  function reportRoleCellHtml(fm, row, disabled, tr) {
+    const kind = (tr?.querySelector('[data-field="accounting_kind"]')?.value)
+      || tariffAccountingKind(row);
+    if (kind === 'auto_contract' || kind === 'auto_vehicle') {
+      return '<span class="ref-system-badge">Система</span>';
     }
-    if (!val && !qs) return '<span class="muted">—</span>';
-    return esc(val || '—');
+    if (kind === 'vehicle_extra') {
+      return `<span class="ref-role-label">${esc(ROLE_LABELS.transport_logistics)}</span>`
+        + '<input type="hidden" data-field="report_role" value="transport_logistics">';
+    }
+    const val = row.report_role || '';
+    let html = `<select class="ref-input" data-field="report_role" ${disabled ? 'disabled' : ''}>`;
+    (fm?.choices || []).forEach((c) => {
+      const sel = val === String(c.value ?? '') ? ' selected' : '';
+      html += `<option value="${esc(c.value)}"${sel}>${esc(c.label)}</option>`;
+    });
+    html += '</select>';
+    return html;
   }
 
-  function displayQuantitySource(fm, row) {
-    const val = row.quantity_source;
-    if (!val) return '<span class="muted">—</span>';
-    const label = choiceLabel(fm, val) || QUANTITY_SOURCE_LABELS[val];
-    return esc(label || val);
+  function displayAccountingKind(fm, row) {
+    const kind = tariffAccountingKind(row);
+    const full = choiceLabel(fm, kind) || ACCOUNTING_KIND_HINTS[kind] || kind;
+    const short = ACCOUNTING_KIND_SHORT[kind] || full;
+    if (isIntrinsicAccounting(row)) {
+      return `<span class="ref-auto-badge" title="${esc(full)}">${esc(short)}</span>`;
+    }
+    return `<span class="ref-accounting-label" title="${esc(full)}">${esc(short || '—')}</span>`;
   }
 
-  function fieldCellHtml(fm, row, readOnly, rowEditing) {
+  function fieldCellHtml(fm, row, readOnly, rowEditing, tr) {
     const f = fm.field;
     const val = row[f];
     const disabled = readOnly || fm.readonly || !rowEditing;
+
+    if (f === 'accounting_kind' && isIntrinsicAccounting(row)) {
+      const kind = tariffAccountingKind(row);
+      const short = ACCOUNTING_KIND_SHORT[kind] || choiceLabel(fm, kind);
+      return `
+        <span class="ref-auto-badge">${esc(short)}</span>
+        <input type="hidden" data-field="accounting_kind" value="${esc(kind)}">
+      `;
+    }
+
+    if (f === 'report_role') {
+      return reportRoleCellHtml(fm, row, disabled, tr);
+    }
+
+    if (!fieldVisibleForRow(fm, row, tr)) {
+      return '<span class="ref-cell-na"></span>';
+    }
 
     if (fm.lookup) {
       const opts = lookupOptions(fm.lookup, row);
@@ -221,12 +303,22 @@
       if (f === 'billing_line_code') {
         return billingLineSelectHtml(fm, val, disabled);
       }
+      const cur = f === 'accounting_kind'
+        ? tariffAccountingKind(row)
+        : String(val ?? '');
       let html = `<select class="ref-input" data-field="${f}" ${disabled ? 'disabled' : ''}>`;
+      if (f === 'accounting_kind') {
+        html += '<option value="">— выберите —</option>';
+      }
       fm.choices.forEach((c) => {
-        const sel = String(val ?? '') === String(c.value) ? ' selected' : '';
+        const sel = cur === String(c.value ?? '') ? ' selected' : '';
         html += `<option value="${esc(c.value)}"${sel}>${esc(c.label)}</option>`;
       });
       html += '</select>';
+      if (f === 'accounting_kind') {
+        const hint = ACCOUNTING_KIND_HINTS[cur] || '';
+        html += `<div class="ref-field-hint muted${hint ? '' : ' hidden'}" data-accounting-hint>${esc(hint)}</div>`;
+      }
       return html;
     }
 
@@ -337,12 +429,57 @@
       </form>`;
   }
 
+  function tariffTableColgroup(fields) {
+    const widths = {
+      name: '26%',
+      unit_id: '6.5rem',
+      rate_ex_vat: '5.5rem',
+      valid_from: '6.5rem',
+      valid_to: '6.5rem',
+      accounting_kind: '7rem',
+      report_role: '9.5rem',
+    };
+    let html = '<colgroup><col style="width:2.25rem">';
+    fields.forEach((f) => {
+      const w = widths[f] ? ` style="width:${widths[f]}"` : '';
+      html += `<col${w}>`;
+    });
+    html += '<col style="width:9rem">';
+    html += '</colgroup>';
+    return html;
+  }
+
+  function bindTariffAccountingRow(tr, row = {}) {
+    const kindSel = tr.querySelector('[data-field="accounting_kind"]');
+    const hintEl = tr.querySelector('[data-accounting-hint]');
+    const sync = () => {
+      const kind = kindSel?.value || tariffAccountingKind(row);
+      if (hintEl) {
+        hintEl.textContent = ACCOUNTING_KIND_HINTS[kind] || '';
+        hintEl.classList.toggle('hidden', !hintEl.textContent);
+      }
+      const roleCell = tr.querySelector('[data-tariff-field="report_role"]');
+      if (roleCell && tr.classList.contains('editing')) {
+        const fm = catMeta().field_meta?.find((x) => x.field === 'report_role');
+        roleCell.innerHTML = reportRoleCellHtml(fm, { ...row, accounting_kind: kind }, false, tr);
+      }
+    };
+    kindSel?.addEventListener('change', sync);
+    sync();
+  }
+
   function displayCellHtml(fm, row) {
     if (!fm) return '';
     const f = fm.field;
     const val = row[f];
     if (f === 'report_role') return displayReportRole(fm, row);
-    if (f === 'quantity_source') return displayQuantitySource(fm, row);
+    if (f === 'accounting_kind') return displayAccountingKind(fm, row);
+    if (f === 'quantity_source') {
+      return displayAccountingKind(
+        catMeta().field_meta?.find((x) => x.field === 'accounting_kind') || fm,
+        row,
+      );
+    }
     if (f === 'billing_line_code') {
       const label = choiceLabel(fm, val);
       if (label) return esc(label);
@@ -363,14 +500,15 @@
     return esc(val ?? '');
   }
 
-  function renderTariffRowCells(cat, fields, row, rowEditing) {
+  function renderTariffRowCells(cat, fields, row, rowEditing, tr) {
     let html = '';
     fields.forEach((f) => {
       const fm = cat.field_meta.find((x) => x.field === f);
+      const dataAttr = f === 'report_role' ? ' data-tariff-field="report_role"' : '';
       if (rowEditing) {
-        html += `<td>${fieldCellHtml(fm, row, false, true)}</td>`;
+        html += `<td${dataAttr}>${fieldCellHtml(fm, row, false, true, tr)}</td>`;
       } else {
-        html += `<td class="display-cell">${displayCellHtml(fm, row)}</td>`;
+        html += `<td class="display-cell${f === 'name' ? ' col-name' : ''}"${dataAttr}>${displayCellHtml(fm, row)}</td>`;
       }
     });
     return html;
@@ -386,8 +524,8 @@
       valid_to: am?.effective_to || '',
       name: '',
       unit_id: null,
-      report_role: '',
-      quantity_source: '',
+      accounting_kind: isCustom ? 'daily_extra' : '',
+      report_role: isCustom ? 'warehouse_logistics' : '',
       rate_ex_vat: null,
     };
   }
@@ -398,7 +536,7 @@
     const pendingKey = amId ? `${amId}:${section}` : null;
     const hasPending = pendingKey && pendingNewRows.has(pendingKey);
     const canAdd = amId && !unlinked && !hasPending;
-    const fields = tariffTableFields(cat, { includeBillingLine: Boolean(hasPending) });
+    const fields = tariffTableFields(cat);
 
     let html = '<div class="ref-tariff-section-block">';
     html += '<div class="ref-tariff-section-head">';
@@ -408,7 +546,9 @@
     }
     html += '</div>';
 
-    html += '<div class="table-wrap"><table class="data-table ref-table ref-tariff-table"><thead><tr>';
+    html += '<div class="table-wrap"><table class="data-table ref-table ref-tariff-table">';
+    html += tariffTableColgroup(fields);
+    html += '<thead><tr>';
     html += '<th>№</th>';
     fields.forEach((f) => {
       const fm = cat.field_meta.find((x) => x.field === f);
@@ -553,7 +693,6 @@
 
     let html = `<h2>${esc(cat.label || 'Ставки')}</h2>`;
     if (cat.hint) html += `<p class="muted">${esc(cat.hint)}</p>`;
-    html += `<label class="ref-advanced-toggle"><input type="checkbox" id="toggle-advanced" ${showAdvanced ? 'checked' : ''}> Показать технические поля</label>`;
 
     const clientKeys = Object.keys(byClient).sort((a, b) =>
       byClient[a].name.localeCompare(byClient[b].name, 'ru'),
@@ -630,10 +769,12 @@
         if (unlinked) {
           html += renderTariffSectionTable(cat, grp.rows, 'main', grp, null, true, clientKey);
         } else {
+          html += '<div class="ref-tariff-tables-group">';
           ['main', 'extra'].forEach((section) => {
             const sectionRows = grp.rows.filter((r) => (section === 'extra') === Boolean(r.is_custom));
             html += renderTariffSectionTable(cat, sectionRows, section, grp, amId, false, clientKey);
           });
+          html += '</div>';
         }
 
         html += '</details>';
@@ -825,6 +966,13 @@
         renderCurrent();
       });
     });
+
+    if (current === 'tariff_rules') {
+      panelEl.querySelectorAll('tr.editing').forEach((tr) => {
+        const row = items.find((r) => String(r.id) === tr.dataset.id) || {};
+        bindTariffAccountingRow(tr, row);
+      });
+    }
 
     const addForm = document.getElementById('add-form');
     if (addForm) addForm.addEventListener('submit', onAdd);

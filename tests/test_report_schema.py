@@ -12,6 +12,19 @@ def test_report_schema_warehouse(auth_client, client):
     assert "valve_gluing" in codes
 
 
+def test_vehicle_tariff_column_uses_human_unit_label():
+    from app.modules.uss.services.report_schema import _vehicle_tariff_column
+
+    col = _vehicle_tariff_column({
+        "billing_line_code": "extra_vehicle_docs_rf",
+        "name": "Доп. комплект ТСД",
+        "unit_code": "pcs",
+        "unit_label": "шт.",
+    })
+    assert col["label"] == "Доп. комплект ТСД, шт."
+    assert "pcs" not in col["label"]
+
+
 def test_transport_shift_includes_schema(auth_client, client):
     auth_client("transport@test.local", "test")
     resp = client.get("/api/uss/transport/shift?warehouse_id=1&date=2026-01-15")

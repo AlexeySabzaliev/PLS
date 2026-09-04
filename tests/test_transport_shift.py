@@ -172,3 +172,34 @@ def test_vehicle_no_show_and_audit(auth_client, client):
     actions = [item["action"] for item in audit.json["items"]]
     assert "create" in actions
     assert "no_show" in actions
+    no_show_entry = next(item for item in audit.json["items"] if item["action"] == "no_show")
+    assert no_show_entry.get("summary")
+
+
+def test_vehicle_audit_changes_display(auth_client, client):
+    auth_client("transport@test.local", "test")
+    create = client.post("/api/uss/transport/vehicles", json={
+        "warehouse_id": 1,
+        "contract_id": 1,
+        "operation_date": "2026-08-07",
+        "tractor_plate": "D333DD33",
+        "operation_type_code": "inbound",
+        "report_quantities": {"extra_vehicle_docs_rf": 1},
+    })
+    vid = create.json["id"]
+    client.post("/api/uss/transport/vehicles", json={
+        "id": vid,
+        "warehouse_id": 1,
+        "contract_id": 1,
+        "operation_date": "2026-08-07",
+        "tractor_plate": "D333DD33",
+        "operation_type_code": "inbound",
+        "report_quantities": {"extra_vehicle_docs_rf": 3},
+    })
+    audit = client.get(f"/api/uss/transport/vehicles/{vid}/audit").json
+    update = next(item for item in audit["items"] if item["action"] == "update")
+    codes = [row["field"] for row in update["changes_display"]]
+    assert "extra_vehicle_docs_rf" in codes
+    rq = next(row for row in update["changes_display"] if row["field"] == "extra_vehicle_docs_rf")
+    assert rq["old"] == "1"
+    assert rq["new"] == "3"

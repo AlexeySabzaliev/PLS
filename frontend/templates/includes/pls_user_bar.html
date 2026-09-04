@@ -1,6 +1,23 @@
 {% if user %}
 <span class="pls-user">
-  <a href="/profile" class="pls-user-profile" title="Профиль">{{ user.full_name or user.email }}</a>
+  <div class="pls-profile-menu" id="pls-profile-menu">
+    <a href="/profile" class="pls-profile-menu__link">{{ user.full_name or user.email }}</a>
+    <button
+      type="button"
+      class="pls-profile-menu__caret"
+      id="pls-profile-toggle"
+      aria-expanded="false"
+      aria-haspopup="true"
+      aria-controls="pls-profile-dropdown"
+      title="Меню профиля"
+    >
+      <span aria-hidden="true">▾</span>
+    </button>
+    <div class="pls-profile-menu__dropdown hidden" id="pls-profile-dropdown" role="menu">
+      <div class="pls-profile-menu__meta muted">{{ user.email }}</div>
+      <a href="/profile" class="pls-profile-menu__item" role="menuitem">Редактировать профиль</a>
+    </div>
+  </div>
   <button type="button" class="btn-header-logout" id="pls-logout-btn">Выйти</button>
 </span>
 {% endif %}

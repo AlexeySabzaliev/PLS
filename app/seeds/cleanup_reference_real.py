@@ -65,7 +65,7 @@ def _is_gauff_name(name: str) -> bool:
 
 def _is_ariston_contract(number: str, client_name: str) -> bool:
     num = (number or "").upper()
-    return "АР-БСХ" in num or "STR-OH-ARISTON" in num or _is_ariston_name(client_name)
+    return "АР-БСХ" in num or _is_ariston_name(client_name)
 
 
 def _is_gauff_contract(number: str, client_name: str) -> bool:

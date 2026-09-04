@@ -25,6 +25,7 @@ class VehicleOperation(db.Model):
     handling_type_code = db.Column(db.String(32))
     extra_handling_m3 = db.Column(db.Numeric(12, 3))
     extra_document_set_qty = db.Column(db.Integer)
+    billing_document_qty = db.Column(db.Integer, nullable=False, default=1)
     registered_at = db.Column(db.DateTime)
     departed_at = db.Column(db.DateTime)
     report_quantities = db.Column(db.JSON, default=dict)

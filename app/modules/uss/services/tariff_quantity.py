@@ -31,15 +31,91 @@ SYSTEM_FORMULA_HINTS: dict[str, str] = {
     "manual_m3": "Сумма м³ ручной загрузки/выгрузки по ТС",
     "mechanized_m3": "Сумма м³ механизированной загрузки/выгрузки по ТС",
     "extra_manual_m3": "Сумма м³ из поля «Доп. обработка» по ТС",
-    "vehicle_docs": "Количество ТС (загрузка или выгрузка) × ставка",
+    "vehicle_docs": "Количество ТС; при необходимости — сумма billing_document_qty по строкам",
     "extra_vehicle_docs": "Сумма из поля «Доп. комплект» по ТС",
+    "extra_vehicle_docs_rf": "Количество доп. комплектов РФ по строкам ТС",
+    "extra_vehicle_docs_rb": "Количество доп. комплектов РБ по строкам ТС",
+    "elco_passports": "Количество паспортов ELCO по строкам ТС",
     "overtime_m3": "Объём обработки сверхурочных ТС",
     "repack_units": "Количество из отчёта упр. запасами (без привязки к ТС)",
+    "valve_gluing": "Штуки из сменного отчёта склада; ставка = переупаковка (1:1)",
+    "vietnam_stickering": "Штуки из сменного отчёта; ставка переупаковки / 8",
+    "flue_stickering": "Штуки из сменного отчёта; ставка переупаковки / 10",
+    "inventory_hours": "Часы из отчёта упр. запасами",
+    "elco_drain_hours": "Часы из сменного отчёта склада",
     "custom_pallet": "Количество паллет из строки ТС (транспорт)",
 }
 
 TRANSPORT_FIELD_CODES = frozenset({"extra_manual_m3", "extra_vehicle_docs"})
 MANUAL_INPUT_SOURCES = frozenset({"manual_vehicle", "manual_daily", "manual_inventory"})
+
+UNIT_DISPLAY_LABELS: dict[str, str] = {
+    "m2": "м²",
+    "m3": "м³",
+    "pcs": "шт.",
+    "hour": "чел.ч.",
+    "vehicle": "маш.",
+}
+
+
+def unit_display_label(unit_code: str | None, *, name: str | None = None) -> str:
+    """Человекочитаемая единица измерения (как в справочнике ставок)."""
+    label = (name or "").strip()
+    if label:
+        return label
+    code = (unit_code or "").strip()
+    if not code:
+        return ""
+    return UNIT_DISPLAY_LABELS.get(code, code)
+
+
+def derive_manual_quantity_source(
+    report_role: str | None,
+    report_scope: str | None,
+) -> str:
+    """Куда писать ручной объём по роли и месту ввода."""
+    role = (report_role or "").strip()
+    scope = (report_scope or "").strip()
+    if scope == "vehicle":
+        return "manual_vehicle"
+    if role == "inventory_management":
+        return "manual_inventory"
+    if role == "warehouse_logistics":
+        return "manual_daily"
+    if role == "transport_logistics":
+        return "manual_vehicle" if scope == "vehicle" else "manual_daily"
+    return "manual_daily"
+
+
+def resolve_tariff_quantity_source(
+    *,
+    quantity_source: str | None,
+    report_role: str | None,
+    report_scope: str | None,
+    is_custom: bool = False,
+) -> str:
+    """Упростить выбор «как считается» из UI справочника ставок."""
+    raw = (quantity_source or "").strip()
+    if raw == "manual" or (is_custom and raw in ("", "manual")):
+        return derive_manual_quantity_source(report_role, report_scope)
+    if raw in MANUAL_INPUT_SOURCES:
+        return raw
+    if raw in QUANTITY_SOURCES:
+        return raw
+    if is_custom:
+        return derive_manual_quantity_source(report_role, report_scope)
+    return raw or derive_manual_quantity_source(report_role, report_scope)
+
+
+def quantity_source_to_ui_mode(quantity_source: str | None) -> str:
+    """Обратное отображение в форме ставок."""
+    raw = (quantity_source or "").strip()
+    if raw in MANUAL_INPUT_SOURCES:
+        return "manual"
+    if raw in ("auto_vehicle", "auto_contract_param", "none"):
+        return raw
+    return "manual"
+
 
 ROLE_OPERATIONAL_DEFAULTS: dict[str, tuple[str, str]] = {
     "transport_logistics": ("manual_vehicle", "vehicle"),
@@ -284,6 +360,7 @@ def apply_tariff_defaults(tariff: dict) -> dict:
     out = dict(tariff)
     code = (out.get("billing_line_code") or "").strip()
     accounting = (out.get("accounting_mode") or "").strip()
+    is_custom = bool(out.get("is_custom"))
     reg = line_def(code)
 
     if accounting == "billing_only":
@@ -292,7 +369,7 @@ def apply_tariff_defaults(tariff: dict) -> dict:
         out["quantity_source"] = "none"
         return out
 
-    if reg and reg.quantity_source in INTRINSIC_AUTO_SOURCES:
+    if reg and reg.quantity_source in INTRINSIC_AUTO_SOURCES and not is_custom:
         out["quantity_source"] = reg.quantity_source
         out["report_role"] = None
         out["report_scope"] = "period"
@@ -338,7 +415,7 @@ def apply_tariff_defaults(tariff: dict) -> dict:
             out["report_scope"] = scope
     if reg and reg.inventory_slot and out.get("report_role") == "inventory_management":
         out.setdefault("inventory_slot", reg.inventory_slot)
-    if reg and reg.default_report_role:
+    if reg and reg.default_report_role and not is_custom:
         probe = dict(out)
         probe["report_role"] = reg.default_report_role
         if reg.default_report_scope:
@@ -396,8 +473,10 @@ def billing_formula_comment(
     code = (line_code or "").strip()
     qty_s = _fmt_qty(quantity)
     unit = (unit_code or (tariff or {}).get("unit_code") or "").strip()
-    unit_labels = {"m2": "м²", "m3": "м³", "pcs": "шт.", "hour": "чел.ч."}
-    unit_label = unit_labels.get(unit, unit or "ед.")
+    unit_label = unit_display_label(
+        unit,
+        name=(tariff or {}).get("unit_label"),
+    ) or "ед."
 
     if code == "storage_area_fixed":
         days = days_count or 0
@@ -406,7 +485,7 @@ def billing_formula_comment(
         days = days_count or 0
         return f"Средняя доп. площадь {qty_s} {unit_label}/сут × {days} дн."
     if code == "vehicle_docs":
-        return f"Кол-во ТС: {qty_s}"
+        return f"Кол-во пакетов документов: {qty_s}"
     if code == "manual_m3":
         return f"Сумма м³ ручной обработки по ТС: {qty_s}"
 
@@ -486,7 +565,7 @@ def auto_vehicle_quantity(
         ops = [o for o in operations if period_start <= _op_date(o) <= period_end]
 
     if code == "vehicle_docs":
-        return Decimal(len(ops))
+        return sum(Decimal(o.get("billing_document_qty") or 1) for o in ops)
 
     if code == "extra_vehicle_docs":
         qty = sum(int(o.get("extra_document_set_qty") or 0) for o in ops)

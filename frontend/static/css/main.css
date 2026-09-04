@@ -249,10 +249,109 @@ body {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.5rem;
   font-size: 0.85rem;
   color: #c8d8ec;
   flex-shrink: 0;
+}
+
+.pls-profile-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  max-width: 280px;
+}
+
+.pls-profile-menu__link {
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.2;
+  text-decoration: none;
+  padding: 0.2rem 0;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.pls-profile-menu__link:hover,
+.pls-profile-menu__link:focus-visible {
+  color: #fff;
+  border-bottom-color: #6eb5ff;
+  outline: none;
+}
+
+.pls-profile-menu__caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #c8d8ec;
+  font-size: 0.7rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.pls-profile-menu__caret:hover,
+.pls-profile-menu__caret[aria-expanded="true"] {
+  color: #fff;
+  background: rgba(110, 181, 255, 0.18);
+}
+
+.pls-profile-menu__toggle {
+  display: none;
+}
+
+.pls-profile-menu__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pls-profile-menu__chevron {
+  font-size: 0.7rem;
+  opacity: 0.85;
+}
+
+.pls-profile-menu__dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  min-width: 220px;
+  padding: 0.35rem 0;
+  border-radius: 6px;
+  background: #fff;
+  color: #1a1a1a;
+  border: 1px solid #d8e0ea;
+  box-shadow: 0 8px 24px rgba(15, 35, 70, 0.18);
+  z-index: 200;
+}
+
+.pls-profile-menu__meta {
+  padding: 0.45rem 0.85rem 0.35rem;
+  font-size: 0.78rem;
+  color: #64748b;
+  border-bottom: 1px solid #e8eef5;
+  word-break: break-all;
+}
+
+.pls-profile-menu__item {
+  display: block;
+  padding: 0.55rem 0.85rem;
+  color: #1e3a5f;
+  text-decoration: none;
+  font-size: 0.88rem;
+}
+
+.pls-profile-menu__item:hover {
+  background: #f1f5f9;
 }
 
 .pls-user-email {
@@ -646,10 +745,63 @@ body {
   font-size: 0.72rem;
   white-space: normal;
   line-height: 1.15;
-  margin: 0.1rem 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.vehicle-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 5.5rem;
+}
+
+.vehicle-row-actions-main,
+.vehicle-row-actions-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.vehicle-row-actions-main .ref-btn {
   display: block;
   width: 100%;
   max-width: 6.5rem;
+}
+
+.vehicle-row-actions-extra {
+  margin-top: 0.15rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed #c8d0d8;
+}
+
+.vehicle-row-actions-extra .ref-btn {
+  display: block;
+  width: 100%;
+  max-width: 6.5rem;
+  font-size: 0.66rem;
+  padding: 0.2rem 0.35rem;
+}
+
+.vehicle-row-actions .btn-row-no-show {
+  color: #8b1a10;
+  border-color: #e8b4b0;
+  background: #fff8f7;
+}
+
+.vehicle-row-actions .btn-row-history {
+  color: #5a6570;
+  background: #f4f6f8;
+  border-color: #d0d7de;
+}
+
+.vehicle-row-actions .is-hidden,
+.vehicle-row-actions-extra.is-hidden {
+  display: none !important;
+}
+
+.vehicle-row-editing .vehicle-row-actions-extra {
+  display: none !important;
 }
 
 .vehicle-processed-badge {
@@ -709,8 +861,13 @@ body {
 }
 
 .audit-dialog-form h3 {
-  margin: 0 0 1rem;
+  margin: 0 0 0.35rem;
   font-size: 1.1rem;
+}
+
+.audit-dialog-lead {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
 }
 
 .audit-list {
@@ -731,7 +888,30 @@ body {
 .audit-changes {
   margin: 0.35rem 0 0;
   padding-left: 1.1rem;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
+  list-style: disc;
+}
+
+.audit-field {
+  font-weight: 600;
+}
+
+.audit-old {
+  color: #8b4513;
+}
+
+.audit-new {
+  color: #1e4620;
+  font-weight: 500;
+}
+
+.audit-summary {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+}
+
+.audit-when {
+  font-size: 0.78rem;
 }
 
 .waybills-block {
@@ -1150,6 +1330,33 @@ nav a { margin-right: 1rem; }
   margin: 0.75rem 0 1rem;
 }
 
+.ref-tariff-tables-group .ref-tariff-table,
+.ref-tariff-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.ref-tariff-table td.col-name,
+.ref-tariff-table th:nth-child(2),
+.ref-tariff-table td:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ref-system-badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  background: #eef2f7;
+  color: #475569;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.ref-role-label {
+  font-size: 0.85rem;
+}
+
 .ref-tariff-section-head {
   display: flex;
   align-items: center;
@@ -1165,6 +1372,32 @@ nav a { margin-right: 1rem; }
 
 .ref-tariff-table .ref-new-row td {
   border-top: 2px solid #4a90d9;
+}
+
+.ref-tariff-table th:nth-child(n+6),
+.ref-tariff-table td:nth-child(n+6) {
+  min-width: 7.5rem;
+}
+
+.ref-tariff-table .ref-accounting-label {
+  display: inline-block;
+  max-width: 9rem;
+  line-height: 1.35;
+  font-size: 0.85rem;
+}
+
+.ref-tariff-table .ref-field-hint {
+  max-width: 11rem;
+}
+
+.ref-tariff-cell--inactive {
+  color: #94a3b8;
+  background: #f8fafc;
+}
+
+.ref-cell-na {
+  display: inline-block;
+  min-width: 0.5rem;
 }
 
 .ref-empty-row td {
@@ -1195,6 +1428,13 @@ nav a { margin-right: 1rem; }
   color: #2d6a3e;
   border-radius: 4px;
   font-size: 0.85rem;
+}
+
+.ref-field-hint {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  max-width: 18rem;
 }
 
 .btn-summary-action {
@@ -1402,16 +1642,6 @@ nav a { margin-right: 1rem; }
   box-sizing: border-box;
 }
 
-.pls-user-profile {
-  color: #1e3a5f;
-  text-decoration: none;
-  margin-right: 0.75rem;
-}
-
-.pls-user-profile:hover {
-  text-decoration: underline;
-}
-
 .status.ok {
   color: #1a6b3a;
 }
@@ -1562,6 +1792,10 @@ nav a { margin-right: 1rem; }
 
 .shift-tab-panels {
   padding-top: 0.75rem;
+}
+
+.shift-tab-panel[hidden] {
+  display: none !important;
 }
 
 .period-lock-banner {
@@ -1729,6 +1963,7 @@ nav a { margin-right: 1rem; }
 .cr-status--ok { background: #e6f4ea; color: #0d7a3f; }
 .cr-status--warn { background: #fff4e5; color: #9a6700; }
 .cr-status--muted { background: #f0f3f6; color: #57606a; }
+.cr-status--expired { background: #fdecea; color: #b42318; }
 .cr-infinity { font-size: 1.25rem; font-weight: 600; color: #0969da; }
 .cr-expiring { color: #9a6700; font-size: 0.82rem; margin-left: 0.35rem; }
 .cr-expired { color: #b42318; font-size: 0.82rem; margin-left: 0.35rem; }

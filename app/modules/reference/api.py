@@ -35,7 +35,16 @@ from app.modules.uss.services.staff_positions import (
     update_staff_position,
 )
 from app.modules.uss.services.tariff_codes import infer_billing_line_code, is_placeholder_code
-from app.modules.uss.services.tariff_quantity import apply_tariff_defaults, billing_line_code_choices
+from app.modules.uss.services.tariff_accounting import (
+    ACCOUNTING_KIND_CHOICES,
+    apply_accounting_kind,
+    tariff_accounting_kind,
+)
+from app.modules.uss.services.tariff_quantity import (
+    apply_tariff_defaults,
+    billing_line_code_choices,
+    resolve_tariff_quantity_source,
+)
 
 bp = Blueprint("reference_api", __name__, url_prefix="/api/reference")
 
@@ -54,11 +63,10 @@ CATALOGS: dict[str, tuple[type, list[str]]] = {
     ),
     "units": (UnitOfMeasure, ["id", "code", "name", "is_active"]),
     "tariff_rules": (TariffRule, [
-        "id", "contract_id", "amendment_id", "billing_line_code", "name",
-        "unit_id", "report_role", "report_scope", "quantity_source",
-        "rate_line_code", "quantity_divisor",
-        "is_custom", "price_agreed", "sort_order", "valid_from", "valid_to",
-        "rate_ex_vat",
+        "id", "contract_id", "amendment_id", "name", "unit_id", "rate_ex_vat",
+        "valid_from", "valid_to", "report_role", "report_scope", "quantity_source",
+        "billing_line_code", "rate_line_code", "quantity_divisor",
+        "is_custom", "price_agreed", "sort_order",
     ]),
     "staff": (StaffPosition, ["id", "code", "name", "is_active"]),
     "vehicle_types": (VehicleType, ["id", "code", "name", "sort_order", "dimensions_label"]),
@@ -96,10 +104,16 @@ READONLY_UI_FIELDS = frozenset({
     "id", "source_file_path", "rate_line_code",
 })
 
-# Скрытые в таблице (доступны в расширенном режиме)
+# Поля ставок, не показываемые в UI (система заполняет сама)
+TARIFF_HIDDEN_UI_FIELDS = frozenset({
+    "billing_line_code", "rate_line_code", "quantity_divisor",
+    "sort_order", "price_agreed", "contract_id", "amendment_id", "is_custom",
+    "quantity_source", "report_scope",
+})
+
+# Скрытые в таблице других справочников (расширенный режим)
 ADVANCED_UI_FIELDS = frozenset({
-    "billing_line_code", "rate_line_code", "quantity_divisor", "sort_order",
-    "report_scope", "price_agreed",
+    "sort_order",
 })
 
 LOOKUP_FIELDS = {
@@ -135,12 +149,13 @@ FIELD_LABELS = {
     "report_role": "Кто вводит",
     "report_scope": "Где вводится",
     "quantity_source": "Как считается",
+    "accounting_kind": "Как считается",
     "is_custom": "Доп. ставка",
     "price_agreed": "Цена согласована",
     "sort_order": "Порядок",
     "valid_from": "Ставка с",
     "valid_to": "Ставка до",
-    "rate_ex_vat": "Тариф без НДС",
+    "rate_ex_vat": "Стоимость (без НДС)",
     "rate_line_code": "Код ставки (тех.)",
     "quantity_divisor": "Делитель",
     "dimensions_label": "Габариты, м",
@@ -184,7 +199,11 @@ CATALOG_HINTS = {
     "units": "Неактивные единицы скрыты в новых ставках. «машина» и «м²·день» оставлены в БД для алгоритмов.",
     "vehicle_types": "Для колонки «Тип ТС» в транспортной смене. Габариты: 13,6×2,45×2,70 (д×ш×в, м). Госномера вводятся вручную в смене.",
     "amendments": "Доп. соглашения (ДС) к договору. Загрузите файл Word — система создаст черновик ДС со ставками из таблицы.",
-    "tariff_rules": "Основные ставки из ДС, дополнительные — согласованы отдельно (флаг «Доп. ставка»).",
+    "tariff_rules": (
+        "Основные ставки — из ДС (обычно из Word). Дополнительные — согласованы отдельно. "
+        "«Как считается» задаёт и формулу, и место ввода в смене: авто по договору/ТС, "
+        "колонка на машине или итог за день. «Кто вводит» — только для допуслуг без ТС."
+    ),
     "warehouse_staff": (
         "Должности, оклад (₽/мес без НДС) и численность по складу ОХ. "
         "«Действует с» — дата начала текущей версии; при смене оклада или численности "
@@ -208,6 +227,12 @@ REPORT_ROLE_CHOICES = [
     ("inventory_management", "Управление запасами"),
 ]
 
+TARIFF_DAILY_ROLE_CHOICES = [
+    ("transport_logistics", "Транспортная логистика"),
+    ("warehouse_logistics", "Складская логистика"),
+    ("inventory_management", "Управление запасами"),
+]
+
 QUANTITY_SOURCE_CHOICES = [
     ("", "— по умолчанию"),
     ("auto_contract_param", "Система: параметр договора"),
@@ -220,10 +245,9 @@ QUANTITY_SOURCE_CHOICES = [
 
 REPORT_SCOPE_CHOICES = [
     ("", "—"),
-    ("vehicle", "На строке ТС"),
-    ("period", "Итог под таблицей"),
+    ("vehicle", "В таблице ТС (на каждую машину)"),
+    ("period", "Итогом за день (без привязки к ТС)"),
 ]
-
 
 def _validate_client_name(name: str, *, exclude_id: int | None = None) -> tuple[str, tuple[dict, int] | None]:
     cleaned = canonical_client_name((name or "").strip())
@@ -273,6 +297,67 @@ def _serialize(model, fields: list[str]) -> dict:
             out[f] = float(val)
         else:
             out[f] = val
+    return out
+
+
+def _serialize_tariff_rule(row: TariffRule, fields: list[str]) -> dict:
+    out = _serialize(row, fields)
+    out["accounting_kind"] = tariff_accounting_kind({
+        "quantity_source": row.quantity_source,
+        "report_scope": row.report_scope,
+        "report_role": row.report_role,
+        "is_custom": row.is_custom,
+        "billing_line_code": row.billing_line_code,
+    })
+    return out
+
+
+def _tariff_ui_fields(fields: list[str]) -> list[str]:
+    """Порядок колонок ставок: accounting_kind вместо quantity_source/report_scope."""
+    hidden = TARIFF_HIDDEN_UI_FIELDS | {"quantity_source", "report_scope"}
+    out: list[str] = []
+    for f in fields:
+        if f in hidden or f == "id":
+            continue
+        if f == "report_role":
+            out.append("accounting_kind")
+        out.append(f)
+    if "accounting_kind" not in out:
+        out.append("accounting_kind")
+    return out
+
+
+def _expand_tariff_accounting(data: dict, *, row: TariffRule | None = None) -> dict:
+    """Развернуть accounting_kind → quantity_source, report_role, report_scope."""
+    out = dict(data)
+    base = {
+        "report_role": out.get("report_role"),
+        "report_scope": out.get("report_scope"),
+        "quantity_source": out.get("quantity_source"),
+        "is_custom": out.get("is_custom"),
+    }
+    if row is not None:
+        for key in base:
+            if base[key] is None and getattr(row, key, None) is not None:
+                base[key] = getattr(row, key)
+        if base["is_custom"] is None:
+            base["is_custom"] = row.is_custom
+    if out.get("accounting_kind") or any(
+        key in out for key in ("quantity_source", "report_role", "report_scope")
+    ):
+        merged = {**base, **out}
+        if merged.get("accounting_kind"):
+            merged = apply_accounting_kind(merged)
+        merged["quantity_source"] = resolve_tariff_quantity_source(
+            quantity_source=merged.get("quantity_source"),
+            report_role=merged.get("report_role"),
+            report_scope=merged.get("report_scope"),
+            is_custom=bool(merged.get("is_custom")),
+        )
+        for key in ("quantity_source", "report_role", "report_scope"):
+            if key in merged:
+                out[key] = merged[key]
+    out.pop("accounting_kind", None)
     return out
 
 
@@ -359,6 +444,7 @@ def _prepare_tariff_create(data: dict) -> tuple[dict, tuple[dict, int] | None]:
     if not data.get("billing_line_code"):
         name = str(data.get("name") or "line").strip() or "line"
         data = {**data, "billing_line_code": f"custom_{_tariff_billing_line_slug(name)}"}
+    data = _expand_tariff_accounting(data)
     name = str(data.get("name") or "").strip()
     if name:
         code = str(data.get("billing_line_code") or "").strip()
@@ -474,9 +560,12 @@ def _field_label(catalog: str, field: str) -> str:
 
 
 def _field_meta_for_catalog(catalog: str, fields: list[str]) -> list[dict]:
+    ui_fields = _tariff_ui_fields(fields) if catalog == "tariff_rules" else fields
     meta = []
-    for f in fields:
+    for f in ui_fields:
         if f == "id":
+            continue
+        if catalog == "tariff_rules" and f in TARIFF_HIDDEN_UI_FIELDS:
             continue
         entry = {
             "field": f,
@@ -492,8 +581,10 @@ def _field_meta_for_catalog(catalog: str, fields: list[str]) -> list[dict]:
                         "select" if f == "status" and catalog in STATUS_CHOICES else (
                             "select" if f == "billing_line_code" and catalog == "tariff_rules" else (
                                 "select" if f == "report_role" else (
-                                    "select" if f == "quantity_source" else (
-                                        "select" if f == "report_scope" else "text"
+                                    "select" if f == "accounting_kind" else (
+                                        "select" if f == "quantity_source" else (
+                                            "select" if f == "report_scope" else "text"
+                                        )
                                     )
                                 )
                             )
@@ -505,7 +596,10 @@ def _field_meta_for_catalog(catalog: str, fields: list[str]) -> list[dict]:
         if f == "status" and catalog in STATUS_CHOICES:
             entry["choices"] = [{"value": v, "label": l} for v, l in STATUS_CHOICES[catalog]]
         if f == "report_role":
-            entry["choices"] = [{"value": v, "label": l} for v, l in REPORT_ROLE_CHOICES]
+            choices = TARIFF_DAILY_ROLE_CHOICES if catalog == "tariff_rules" else REPORT_ROLE_CHOICES
+            entry["choices"] = [{"value": v, "label": l} for v, l in choices]
+        if f == "accounting_kind" and catalog == "tariff_rules":
+            entry["choices"] = [{"value": v, "label": l} for v, l in ACCOUNTING_KIND_CHOICES]
         if f == "quantity_source":
             entry["choices"] = [{"value": v, "label": l} for v, l in QUANTITY_SOURCE_CHOICES]
         if f == "report_scope":
@@ -536,7 +630,7 @@ def catalog_meta():
             "code": code,
             "label": CATALOG_LABELS.get(code, code),
             "hint": CATALOG_HINTS.get(code, ""),
-            "fields": fields,
+            "fields": _tariff_ui_fields(fields) if code == "tariff_rules" else fields,
             "field_meta": _field_meta_for_catalog(code, fields),
             "read_only": code in READ_ONLY_CATALOGS,
             "section": SECTION_MAP.get(code),
@@ -640,6 +734,8 @@ def list_catalog(catalog: str):
         ).limit(2000).all()
     else:
         rows = model.query.order_by(model.id).limit(500).all()
+    if catalog == "tariff_rules":
+        return {"items": [_serialize_tariff_rule(r, fields) for r in rows]}
     return {"items": [_serialize(r, fields) for r in rows]}
 
 
@@ -686,6 +782,8 @@ def create_catalog_item(catalog: str):
             "error": "db_constraint",
             "message": "Не удалось сохранить ставку: проверьте уникальность кода строки и связь с ДС",
         }, 422
+    if catalog == "tariff_rules":
+        return _serialize_tariff_rule(row, fields), 201
     return _serialize(row, fields), 201
 
 
@@ -715,10 +813,19 @@ def update_catalog_item(catalog: str, item_id: int):
         if "is_active" in data:
             row.is_active = _coerce_field("is_active", data["is_active"])
     else:
+        if catalog == "tariff_rules" and (
+            "accounting_kind" in data
+            or "quantity_source" in data
+            or "report_role" in data
+            or "report_scope" in data
+        ):
+            data = _expand_tariff_accounting(dict(data), row=row)
         _apply_payload(row, data, fields, for_create=False)
     if catalog == "tariff_rules":
         _normalize_tariff_row(row)
     db.session.commit()
+    if catalog == "tariff_rules":
+        return _serialize_tariff_rule(row, fields)
     return _serialize(row, fields)
 
 

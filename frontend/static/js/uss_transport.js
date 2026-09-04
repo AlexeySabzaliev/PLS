@@ -25,6 +25,35 @@
 
   const REQUIRED_HINT = 'Для завершения обработки: тягач, операция, прибытие, убытие (прицеп — по необходимости).';
 
+  function readNav() {
+    const q = UssApi.qs();
+    return {
+      clientId: q.get('client_id') || '',
+      contractId: q.get('contract_id') || '',
+      panel: q.get('panel') || 'vehicles',
+    };
+  }
+
+  function writeNav(partial, base = {}) {
+    const q = UssApi.qs();
+    const next = {
+      warehouse_id: base.warehouse_id ?? q.get('warehouse_id') ?? '',
+      date: base.date ?? q.get('date') ?? '',
+      client_id: partial.clientId ?? readNav().clientId,
+      contract_id: partial.contractId ?? readNav().contractId,
+      panel: partial.panel ?? readNav().panel,
+    };
+    Object.keys(next).forEach((k) => {
+      if (!next[k]) delete next[k];
+    });
+    UssApi.setQs(next);
+  }
+
+  function reload(nav = {}) {
+    writeNav(nav);
+    load();
+  }
+
   function setStatus(msg, isError) {
     statusEl.textContent = msg;
     statusEl.className = isError ? 'status error' : 'status';
@@ -42,7 +71,7 @@
       if (data.message) msg += `. ${data.message}`;
       if (data.warnings?.length) msg += ` ${data.warnings.join(' ')}`;
       setStatus(msg, Boolean(data.synced === 0 && !data.message?.includes('демо')));
-      load();
+      reload();
     } catch (e) {
       setStatus(e.message, true);
     }
@@ -116,7 +145,7 @@
     tr.appendChild(td);
   }
 
-  function vehicleRow(vehicle, fields, warehouseId, opDate, isNew, periodLocked) {
+  function vehicleRow(vehicle, fields, warehouseId, opDate, isNew, periodLocked, nav) {
     const tr = document.createElement('tr');
     tr.dataset.vehicleId = vehicle.id || '';
     if (vehicle.is_complete) tr.classList.add('vehicle-row-complete');
@@ -163,6 +192,12 @@
     const tdBtn = document.createElement('td');
     tdBtn.className = 'col-actions vehicle-row-actions';
 
+    const mainActions = document.createElement('div');
+    mainActions.className = 'vehicle-row-actions-main';
+
+    const extraActions = document.createElement('div');
+    extraActions.className = 'vehicle-row-actions-extra';
+
     const btnEdit = document.createElement('button');
     btnEdit.type = 'button';
     btnEdit.className = 'ref-btn ref-btn--ghost btn-row-edit';
@@ -170,38 +205,40 @@
 
     const btnSave = document.createElement('button');
     btnSave.type = 'button';
-    btnSave.className = 'ref-btn ref-btn--primary btn-row-save';
+    btnSave.className = 'ref-btn ref-btn--primary btn-row-save is-hidden';
     btnSave.textContent = isNew ? 'Создать' : 'Сохранить';
-    btnSave.hidden = !isNew;
 
     const btnCancel = document.createElement('button');
     btnCancel.type = 'button';
-    btnCancel.className = 'ref-btn btn-row-cancel';
+    btnCancel.className = 'ref-btn btn-row-cancel is-hidden';
     btnCancel.textContent = 'Отмена';
-    btnCancel.hidden = !isNew;
 
     const btnNoShow = document.createElement('button');
     btnNoShow.type = 'button';
     btnNoShow.className = 'ref-btn btn-row-no-show';
     btnNoShow.textContent = 'Не прибыл';
     btnNoShow.title = 'Заявка была, ТС не приехало';
-    btnNoShow.hidden = isNew || !vehicle.id || vehicle.arrival_status === 'no_show';
 
     const btnHistory = document.createElement('button');
     btnHistory.type = 'button';
-    btnHistory.className = 'ref-btn ref-btn--ghost btn-row-history';
-    btnHistory.textContent = 'История';
-    btnHistory.hidden = isNew || !vehicle.id;
+    btnHistory.className = 'ref-btn btn-row-history';
+    btnHistory.textContent = 'Журнал';
+
+    function setBtnVisible(btn, visible) {
+      btn.classList.toggle('is-hidden', !visible);
+    }
 
     function setEditing(on) {
       editing = on;
       UssApi.setRowFieldsEditable(tr, on);
       waybillsEditor?.setEditable?.(on);
-      btnEdit.hidden = on || periodLocked;
-      btnSave.hidden = !on;
-      btnCancel.hidden = !on;
-      btnNoShow.hidden = on || isNew || !vehicle.id || vehicle.arrival_status === 'no_show' || periodLocked;
-      btnHistory.hidden = isNew || !vehicle.id;
+      setBtnVisible(btnEdit, !on && !periodLocked);
+      setBtnVisible(btnSave, on);
+      setBtnVisible(btnCancel, on);
+      const showExtra = !isNew && !!vehicle.id && !on;
+      extraActions.classList.toggle('is-hidden', !showExtra);
+      setBtnVisible(btnNoShow, showExtra && vehicle.arrival_status !== 'no_show' && !periodLocked);
+      setBtnVisible(btnHistory, showExtra);
       tr.classList.toggle('vehicle-row-editing', on);
     }
 
@@ -210,7 +247,7 @@
     btnEdit.addEventListener('click', () => setEditing(true));
     btnCancel.addEventListener('click', () => {
       if (isNew) tr.remove();
-      else load();
+      else reload(nav);
     });
 
     btnSave.addEventListener('click', async () => {
@@ -221,7 +258,7 @@
           body: JSON.stringify(payload),
         });
         setStatus(isNew ? 'Строка создана.' : 'Сохранено.');
-        load();
+        reload(nav);
       } catch (e) {
         setStatus(e.message, true);
       }
@@ -232,7 +269,7 @@
       try {
         await UssApi.json(`/api/uss/transport/vehicles/${vehicle.id}/no-show`, { method: 'POST', body: '{}' });
         setStatus('Отмечено: не прибыл.');
-        load();
+        reload(nav);
       } catch (e) {
         setStatus(e.message, true);
       }
@@ -240,7 +277,8 @@
 
     btnHistory.addEventListener('click', async () => {
       try {
-        await UssApi.showVehicleAuditDialog(vehicle.id);
+        const plate = vehicle.tractor_plate || '';
+        await UssApi.showVehicleAuditDialog(vehicle.id, { plate });
       } catch (e) {
         setStatus(e.message, true);
       }
@@ -251,12 +289,14 @@
       btnNoShow.disabled = true;
     }
 
-    tdBtn.append(btnEdit, btnSave, btnCancel, btnNoShow, btnHistory);
+    mainActions.append(btnEdit, btnSave, btnCancel);
+    extraActions.append(btnNoShow, btnHistory);
+    tdBtn.append(mainActions, extraActions);
     tr.appendChild(tdBtn);
     return tr;
   }
 
-  function renderVehicles(container, vehicles, contractId, warehouseId, opDate, schema, periodLocked) {
+  function renderVehicles(container, vehicles, contractId, warehouseId, opDate, schema, periodLocked, nav) {
     const fields = schema.vehicle_fixed_fields || [];
     container.innerHTML = '';
     container.className = 'vehicles-section';
@@ -292,7 +332,7 @@
 
     const tbody = document.createElement('tbody');
     vehicles.forEach((v) => {
-      tbody.appendChild(vehicleRow(v, fields, warehouseId, opDate, false, periodLocked));
+      tbody.appendChild(vehicleRow(v, fields, warehouseId, opDate, false, periodLocked, nav));
     });
     table.appendChild(tbody);
     wrap.appendChild(table);
@@ -305,7 +345,7 @@
       addBtn.textContent = '+ Добавить ТС';
       addBtn.addEventListener('click', () => {
         const empty = { contract_id: contractId, report_quantities: {}, waybills: [] };
-        tbody.appendChild(vehicleRow(empty, fields, warehouseId, opDate, true, false));
+        tbody.appendChild(vehicleRow(empty, fields, warehouseId, opDate, true, false, nav));
       });
       container.appendChild(addBtn);
     }
@@ -321,7 +361,7 @@
         `/api/uss/context?role=${role}&date=${date}${warehouseId ? `&warehouse_id=${warehouseId}` : ''}`,
       );
       warehouseId = String(ctx.warehouse_id);
-      UssApi.setQs({ warehouse_id: warehouseId, date: ctx.date });
+      writeNav({}, { warehouse_id: warehouseId, date: ctx.date });
 
       UssApi.renderToolbar(toolbarEl, {
         warehouses: ctx.warehouses,
@@ -330,7 +370,15 @@
         role,
         minDate: ctx.min_date,
         maxDate: ctx.max_date,
-        onChange: (p) => { UssApi.setQs(p); load(); },
+        onChange: (p) => {
+          const prevWh = UssApi.qs().get('warehouse_id');
+          const resetNav = prevWh && prevWh !== String(p.warehouse_id);
+          writeNav(
+            resetNav ? { clientId: '', contractId: '', panel: 'vehicles' } : {},
+            { warehouse_id: p.warehouse_id, date: p.date },
+          );
+          load();
+        },
       });
 
       const syncBtn = document.createElement('button');
@@ -358,13 +406,22 @@
 
       const monthLabel = data.operation_date?.slice(0, 7);
       const clientGroups = UssApi.groupContractsByClient(data.contracts);
+      const nav = readNav();
 
       function clientVehicleCount(group) {
         const ids = new Set(group.contracts.map((c) => String(c.contract_id || c.id)));
         return (data.vehicles || []).filter((v) => ids.has(String(v.contract_id))).length;
       }
 
-      function renderContractBlock(c) {
+      function contractNav(clientId, contractId, panel) {
+        return {
+          clientId: clientId != null ? String(clientId) : nav.clientId,
+          contractId: String(contractId),
+          panel: panel || nav.panel || 'vehicles',
+        };
+      }
+
+      function renderContractBlock(c, clientId) {
         const block = document.createElement('section');
         block.className = 'contract-block';
         const blockKey = UssApi.contractBlockKey(c);
@@ -373,7 +430,9 @@
         const totals = UssApi.totalsMap(data.daily_totals?.[cid]);
         const vehicles = (data.vehicles || []).filter((v) => String(v.contract_id) === cid);
         const periodInputs = schema.period_inputs || [];
+        const vehicleInputs = schema.vehicle_inputs || [];
         const periodLocked = UssApi.applyContractPeriodLock(block, data.period_locks?.[cid], monthLabel);
+        const blockNav = contractNav(clientId, c.id, nav.contractId === cid ? nav.panel : 'vehicles');
 
         UssApi.renderContractHeader(block, c);
         UssApi.renderContractDateHint(block, c.date_hint);
@@ -381,19 +440,28 @@
         const tabsHost = document.createElement('div');
         block.appendChild(tabsHost);
 
-        const tabs = [{
-          label: 'ТС',
-          render: (panel) => {
-            renderVehicles(panel, vehicles, c.id, data.warehouse_id, data.operation_date, schema, periodLocked);
+        const tabs = [
+          {
+            label: 'Таблица транспорта',
+            render: (panel) => {
+              panel.replaceChildren();
+              renderVehicles(panel, vehicles, c.id, data.warehouse_id, data.operation_date, schema, periodLocked, blockNav);
+              if (vehicleInputs.length) {
+                const hint = document.createElement('p');
+                hint.className = 'muted uss-shift-field-hint';
+                hint.textContent = 'Доп. услуги на строке ТС — колонки в таблице выше. Итоги за день без ТС — вкладка «Дополнительный».';
+                panel.appendChild(hint);
+              }
+            },
           },
-        }];
-
-        if (periodInputs.length) {
-          tabs.push({
+          {
             label: 'Дополнительный',
             render: (panel) => {
+              panel.replaceChildren();
               UssApi.renderDailyReportForm(panel, {
-                schema: { period_inputs: periodInputs },
+                schema: {
+                  period_inputs: periodInputs,
+                },
                 totals,
                 readOnly: periodLocked,
                 onPeriodSave: async (entries) => {
@@ -408,25 +476,45 @@
                       }),
                     });
                     setStatus('Дополнительные поля сохранены.');
-                    load();
+                    reload({ ...blockNav, panel: 'daily' });
                   } catch (e) {
                     setStatus(e.message, true);
                   }
                 },
               });
             },
-          });
+          },
+        ];
+
+        let innerTabIndex = 0;
+        if (nav.contractId === cid && nav.panel === 'daily') {
+          innerTabIndex = 1;
         }
 
-        UssApi.renderContractTabs(tabsHost, tabs);
+        UssApi.renderContractTabs(tabsHost, tabs, {
+          initialIndex: innerTabIndex,
+          onChange: (index) => {
+            writeNav({
+              clientId: clientId != null ? String(clientId) : nav.clientId,
+              contractId: cid,
+              panel: index === 0 ? 'vehicles' : 'daily',
+            });
+          },
+        });
         return block;
       }
 
       if (clientGroups.length <= 1) {
+        const onlyClientId = clientGroups[0]?.client_id;
         (clientGroups[0]?.contracts || data.contracts || []).forEach((c) => {
-          contentEl.appendChild(renderContractBlock(c));
+          contentEl.appendChild(renderContractBlock(c, onlyClientId));
         });
       } else {
+        let clientTabIndex = 0;
+        if (nav.clientId) {
+          const idx = clientGroups.findIndex((g) => String(g.client_id) === nav.clientId);
+          if (idx >= 0) clientTabIndex = idx;
+        }
         const clientTabsHost = document.createElement('div');
         clientTabsHost.className = 'transport-client-tabs';
         contentEl.appendChild(clientTabsHost);
@@ -435,10 +523,20 @@
           render: (panel) => {
             const wrap = document.createElement('div');
             wrap.className = 'transport-client-panel';
-            g.contracts.forEach((c) => wrap.appendChild(renderContractBlock(c)));
+            g.contracts.forEach((c) => wrap.appendChild(renderContractBlock(c, g.client_id)));
             panel.appendChild(wrap);
           },
-        })));
+        })), {
+          initialIndex: clientTabIndex,
+          onChange: (index) => {
+            const g = clientGroups[index];
+            writeNav({
+              clientId: g.client_id != null ? String(g.client_id) : '',
+              contractId: '',
+              panel: 'vehicles',
+            });
+          },
+        });
       }
 
       const sec = data.security?.label || (data.security?.source === 'demo' ? 'демо-охрана' : '');

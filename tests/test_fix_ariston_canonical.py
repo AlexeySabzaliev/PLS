@@ -121,7 +121,7 @@ def test_fix_ariston_supersedes_short_ds6_duplicate(app):
             contract_id=contract.id, number=CANONICAL_DS_NUMBER
         ).first()
         codes = {t.billing_line_code for t in TariffRule.query.filter_by(amendment_id=ds6.id).all()}
-        assert "extra_vehicle_docs" not in codes
+        assert "extra_vehicle_docs" in codes
         assert codes.issubset(CANONICAL_DS6_TARIFF_CODES)
 
 
@@ -134,8 +134,7 @@ def test_fix_ariston_canonical_merges_and_creates_ds6(app):
         canonical_client = Client.query.filter_by(name=CANONICAL_CLIENT_NAME, is_active=True).first()
         assert canonical_client is not None
         wrong_client = Client.query.filter_by(name="Аристон").first()
-        assert wrong_client is not None
-        assert wrong_client.is_active is False
+        assert wrong_client is None
 
         spb1 = Warehouse.query.filter_by(code="spb1").first()
         assert spb1.is_active is False
@@ -148,23 +147,38 @@ def test_fix_ariston_canonical_merges_and_creates_ds6(app):
         assert contract.warehouse_id == Warehouse.query.filter_by(code="strelna").first().id
 
         wrong = Contract.query.filter_by(number=WRONG_CONTRACT_NUMBER).first()
-        assert wrong.status == "closed"
+        assert wrong is None
 
         ds6 = ContractAmendment.query.filter_by(contract_id=contract.id, number=CANONICAL_DS_NUMBER).first()
         assert ds6 is not None
         assert ds6.effective_from == date(2026, 8, 1)
+        assert ds6.status == "active"
 
         tariffs = TariffRule.query.filter_by(amendment_id=ds6.id).all()
-        assert len(tariffs) >= 8
+        assert len(tariffs) == 13
         codes = {t.billing_line_code for t in tariffs}
         assert "storage_area_fixed" in codes
         assert "manual_m3" in codes
+        assert "extra_vehicle_docs" in codes
+        assert "extra_vehicle_docs_rf" not in codes
+        assert "extra_vehicle_docs_rb" not in codes
         extra = next(t for t in tariffs if t.billing_line_code == "storage_area_extra")
         assert extra.rate_ex_vat == Decimal("24")
-        custom = [t for t in tariffs if t.billing_line_code in ("extra_vehicle_docs_rf", "elco_passports")]
-        assert custom
-        assert all(t.is_custom for t in custom)
-        assert not any(t.billing_line_code == "extra_vehicle_docs" for t in tariffs)
+        extra_docs = next(t for t in tariffs if t.billing_line_code == "extra_vehicle_docs")
+        assert extra_docs.is_custom is True
+        assert extra_docs.rate_ex_vat == Decimal("109.52")
+        assert extra_docs.rate_line_code == "vehicle_docs"
+        valve = next(t for t in tariffs if t.billing_line_code == "valve_gluing")
+        assert valve.is_custom is True
+        assert valve.rate_ex_vat == Decimal("109.52")
+        flue = next(t for t in tariffs if t.billing_line_code == "flue_stickering")
+        assert flue.is_custom is True
+        assert flue.rate_ex_vat == Decimal("21.904")
+        elco = next(t for t in tariffs if t.billing_line_code == "elco_passports")
+        assert elco.is_custom is True
+        drain = next(t for t in tariffs if t.billing_line_code == "elco_drain_hours")
+        assert drain.is_custom is True
+        assert drain.rate_ex_vat == Decimal("985.68")
 
         dup = ContractAmendment.query.filter_by(
             contract_id=contract.id, number="ДС-6"
