@@ -1,49 +1,162 @@
 {% extends "uss/base.html" %}
 
+
+
 {% block title %}УСС{% endblock %}
 
+
+
 {% block content %}
+
   <h1 class="page-title">Учёт и сопровождение складских услуг</h1>
 
+
+
   <section class="uss-intro">
+
     <p class="uss-intro-lead">
+
       Подсистема портала <strong>ПЛС</strong> для операционного учёта на площадках ответственного хранения:
+
       регистрация ТС и документов, складские смены, управление запасами, расчёт биллинга и контроль
+
       эффективности относительно фонда оплаты труда.
+
     </p>
+
+
 
     <div class="uss-intro-grid">
+
       <article class="uss-intro-card">
+
         <h2 class="uss-intro-card-title">Операционный учёт</h2>
-        <p class="muted">Сменный учёт по ролям: транспорт, склад, запасы. Данные используются для биллинга клиентов ОХ.</p>
-        <ul class="uss-intro-links">
-          <li><a href="/uss/transport">Транспортная логистика</a> — ТС, охрана, ПРР, сверхурочные</li>
-          <li><a href="/uss/warehouse">Складская логистика</a> — смена склада, доп. работы</li>
-          <li><a href="/uss/inventory">Управление запасами</a> — остатки и инвентаризация</li>
+
+        <p class="uss-intro-card-lead">Сменный учёт по ролям. Данные идут в биллинг клиентов ОХ.</p>
+
+        <ul class="uss-intro-list">
+
+          <li>
+
+            <span class="uss-intro-item-name">Транспортная логистика</span>
+
+            <span class="uss-intro-item-desc">ТС, синхронизация с охраной, ПРР, сверхурочные по убытию</span>
+
+          </li>
+
+          <li>
+
+            <span class="uss-intro-item-name">Складская логистика</span>
+
+            <span class="uss-intro-item-desc">Смена склада, дополнительные работы</span>
+
+          </li>
+
+          <li>
+
+            <span class="uss-intro-item-name">Управление запасами</span>
+
+            <span class="uss-intro-item-desc">Остатки, инвентаризация, корректировки</span>
+
+          </li>
+
         </ul>
+
       </article>
 
+
+
       <article class="uss-intro-card">
+
         <h2 class="uss-intro-card-title">Отчёты</h2>
-        <p class="muted">Сводные расчёты по договорам и площадкам за выбранный период.</p>
-        <ul class="uss-intro-links">
-          <li><a href="/uss/reports/billing">Биллинг ОХ</a> — начисления по тарифам ДС</li>
-          <li><a href="/uss/reports/fot">ФОТ vs операционка</a> — выручка смены и фонд оплаты труда</li>
+
+        <p class="uss-intro-card-lead">Сводные расчёты по договорам и площадкам за выбранный период.</p>
+
+        <ul class="uss-intro-list">
+
+          <li>
+
+            <span class="uss-intro-item-name">Биллинг ОХ</span>
+
+            <span class="uss-intro-item-desc">Начисления по тарифам доп. соглашений</span>
+
+          </li>
+
+          <li>
+
+            <span class="uss-intro-item-name">Эффективность ОХ</span>
+
+            <span class="uss-intro-item-desc">Операционная выручка смены и фонд оплаты труда</span>
+
+          </li>
+
+          <li>
+
+            <span class="uss-intro-item-name">Договоры и ДС</span>
+
+            <span class="uss-intro-item-desc">Свод по клиентам, статусам и срокам действия (автопролонгация — ∞)</span>
+
+          </li>
+
         </ul>
+
       </article>
 
+
+
       <article class="uss-intro-card">
+
         <h2 class="uss-intro-card-title">Справочники</h2>
-        <p class="muted">Клиенты, договоры, доп. соглашения, ставки, штат ФОТ, типы ТС и доступы.</p>
-        <p><a href="/admin/reference" class="btn-secondary">Открыть справочники</a></p>
+
+        <p class="uss-intro-card-lead">Нормативно-справочная информация для учёта и расчётов.</p>
+
+        <ul class="uss-intro-list">
+
+          <li>
+
+            <span class="uss-intro-item-name">Клиенты и договоры</span>
+
+            <span class="uss-intro-item-desc">Доп. соглашения, ставки, типы ТС</span>
+
+          </li>
+
+          <li>
+
+            <span class="uss-intro-item-name">ФОТ ОХ</span>
+
+            <span class="uss-intro-item-desc">Должности, оклады и численность по складу</span>
+
+          </li>
+
+          <li>
+
+            <span class="uss-intro-item-name">Склады</span>
+
+            <span class="uss-intro-item-desc">График смены для расчёта сверхурочных</span>
+
+          </li>
+
+        </ul>
+
       </article>
+
     </div>
 
+
+
     {% if user.role_codes %}
-    <p class="muted uss-intro-foot">
-      Вы вошли как <strong>{{ user.email }}</strong>
-      {% if user.role_codes %}({{ user.role_codes | join(', ') }}){% endif %}.
+
+    <p class="uss-intro-foot muted">
+
+      {{ user.email }}
+
+      <span class="uss-intro-roles">{{ user.role_codes | join(', ') }}</span>
+
     </p>
+
     {% endif %}
+
   </section>
+
 {% endblock %}
+

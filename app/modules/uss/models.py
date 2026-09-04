@@ -31,6 +31,9 @@ class VehicleOperation(db.Model):
     vehicle_type_id = db.Column(db.Integer, db.ForeignKey("vehicle_types.id"))
     source = db.Column(db.String(32), nullable=False, default="manual")
     security_request_id = db.Column(db.String(64))
+    arrival_status = db.Column(db.String(32), nullable=False, default="expected")
+    processed_by = db.Column(db.Integer, db.ForeignKey("users.id"))
+    processed_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     waybills = db.relationship(
         "VehicleWaybill",
@@ -51,6 +54,21 @@ class VehicleWaybill(db.Model):
     mx_number = db.Column(db.String(256))
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     operation = db.relationship("VehicleOperation", back_populates="waybills")
+
+
+class VehicleOperationAuditLog(db.Model):
+    """История изменений строки ТС."""
+    __tablename__ = "vehicle_operation_audit_logs"
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_operation_id = db.Column(
+        db.Integer, db.ForeignKey("vehicle_operations.id", ondelete="CASCADE"), nullable=False,
+    )
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    user_name = db.Column(db.String(255))
+    action = db.Column(db.String(64), nullable=False)
+    changes = db.Column(db.JSON)
+    snapshot = db.Column(db.JSON)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
 class OperationDailyTotal(db.Model):

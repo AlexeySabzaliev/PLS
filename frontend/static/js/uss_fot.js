@@ -1,4 +1,4 @@
-/** Отчёт ФОТ vs операционка (УСС). */
+/** Отчёт «Эффективность ОХ» (УСС). */
 (function initFotReportPage() {
   const statusEl = document.getElementById('status');
   const toolbarEl = document.getElementById('toolbar');
@@ -92,8 +92,8 @@
 
   function renderSummary(r) {
     const staffNote = r.staff_missing
-      ? `<p class="fot-frozen-note muted">${r.staff_message || 'Штат ФОТ не заполнен.'} `
-        + `<a href="/admin/reference?catalog=warehouse_staff">Открыть «Штат ФОТ»</a></p>`
+      ? `<p class="fot-frozen-note muted">${r.staff_message || 'ФОТ ОХ не заполнен.'} `
+        + `<a href="/admin/reference?catalog=warehouse_staff">Открыть «ФОТ ОХ»</a></p>`
       : '';
     summaryEl.innerHTML = `
       ${staffNote}

@@ -1,12 +1,24 @@
-{% extends "uss/reports_shell.html" %}
-{% block title %}Отчёты{% endblock %}
-{% block report_content %}
-  <h2>Доступные отчёты</h2>
-  <p class="muted">Выберите отчёт в меню слева. Список будет расширяться по мере добавления аналитики.</p>
-  <ul class="report-catalog">
-    <li>
-      <a href="/uss/reports/fot"><strong>ФОТ vs операционка</strong></a>
-      <span class="muted"> — сравнение выручки по операциям с фондом оплаты труда склада</span>
-    </li>
-  </ul>
-{% endblock %}
+{% extends "uss/reports_shell.html" %}
+
+{% block title %}Отчёты{% endblock %}
+
+{% block report_content %}
+
+  <h2>Доступные отчёты</h2>
+
+  <p class="muted">Выберите отчёт в меню слева. Список будет расширяться по мере добавления аналитики.</p>
+
+  <ul class="report-catalog">
+
+    <li>
+
+      <a href="/uss/reports/fot"><strong>Эффективность ОХ</strong></a>
+
+      <span class="muted"> — сравнение выручки по операциям с фондом оплаты труда склада</span>
+
+    </li>
+
+  </ul>
+
+{% endblock %}
+

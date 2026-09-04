@@ -46,6 +46,7 @@ class Contract(db.Model, TimestampMixin):
     product_type_id = db.Column(db.Integer, db.ForeignKey("product_types.id"), nullable=False)
     number = db.Column(db.String(64), nullable=False)
     status = db.Column(db.String(32), default="active", nullable=False)
+    auto_renew = db.Column(db.Boolean, default=False, nullable=False)
     billing_config = db.Column(db.JSON, default=dict)
     client = db.relationship("Client")
     warehouse = db.relationship("Warehouse")
@@ -60,6 +61,7 @@ class ContractAmendment(db.Model, TimestampMixin):
     status = db.Column(db.String(32), default="draft", nullable=False)
     effective_from = db.Column(db.Date, nullable=False)
     effective_to = db.Column(db.Date)
+    auto_renew = db.Column(db.Boolean, default=False, nullable=False)
     source_file_path = db.Column(db.String(512))
     contract = db.relationship("Contract")
 
@@ -144,6 +146,8 @@ class User(db.Model, TimestampMixin):
     password_hash = db.Column(db.String(255))
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
+    # Доп. идентификаторы SSO (sabzaliev, BSH-RU\sabzaliev) через запятую
+    sso_aliases = db.Column(db.String(512))
 
 
 class UserRole(db.Model):
@@ -175,7 +179,7 @@ class SectionMaintenance(db.Model):
 
 
 class SsoAccessRequest(db.Model):
-    """Заявка на доступ: SSO-пользователь есть в AD, но нет в БД."""
+    """Устарело: заявки SSO (не используется)."""
     __tablename__ = "sso_access_requests"
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False)
@@ -183,6 +187,23 @@ class SsoAccessRequest(db.Model):
     display_name = db.Column(db.String(255))
     status = db.Column(db.String(32), default="pending", nullable=False)
     login_attempts = db.Column(db.Integer, default=1, nullable=False)
+    first_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    last_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    resolved_at = db.Column(db.DateTime)
+    resolved_by = db.Column(db.Integer, db.ForeignKey("users.id"))
+    admin_note = db.Column(db.String(512))
+
+
+class PasswordResetRequest(db.Model):
+    """Заявка пользователя на восстановление пароля."""
+    __tablename__ = "password_reset_requests"
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    display_name = db.Column(db.String(255))
+    status = db.Column(db.String(32), default="pending", nullable=False)
+    request_count = db.Column(db.Integer, default=1, nullable=False)
+    user_note = db.Column(db.String(512))
     first_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     last_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     resolved_at = db.Column(db.DateTime)

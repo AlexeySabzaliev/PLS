@@ -47,10 +47,10 @@ CATALOGS: dict[str, tuple[type, list[str]]] = {
         ["id", "code", "name", "work_day_start", "work_day_end", "security_visit_place", "is_active"],
     ),
     "product_types": (ProductType, ["id", "code", "name", "is_active"]),
-    "contracts": (Contract, ["id", "client_id", "warehouse_id", "product_type_id", "number", "status"]),
+    "contracts": (Contract, ["id", "client_id", "warehouse_id", "product_type_id", "number", "status", "auto_renew"]),
     "amendments": (
         ContractAmendment,
-        ["id", "contract_id", "number", "status", "effective_from", "effective_to", "source_file_path"],
+        ["id", "contract_id", "number", "status", "effective_from", "effective_to", "auto_renew", "source_file_path"],
     ),
     "units": (UnitOfMeasure, ["id", "code", "name", "is_active"]),
     "tariff_rules": (TariffRule, [
@@ -84,7 +84,7 @@ SECTION_MAP = {
 
 DATE_FIELDS = frozenset({"effective_from", "effective_to", "valid_from", "valid_to"})
 TIME_FIELDS = frozenset({"work_day_start", "work_day_end"})
-BOOL_FIELDS = frozenset({"is_active", "is_custom", "price_agreed"})
+BOOL_FIELDS = frozenset({"is_active", "is_custom", "price_agreed", "auto_renew"})
 INT_FIELDS = frozenset({
     "client_id", "warehouse_id", "product_type_id", "contract_id",
     "amendment_id", "unit_id", "sort_order", "vehicle_type_id",
@@ -127,6 +127,7 @@ FIELD_LABELS = {
     "contract_id": "Договор",
     "effective_from": "Действует с",
     "effective_to": "Действует до",
+    "auto_renew": "Автопролонгация",
     "source_file_path": "Файл ДС",
     "billing_line_code": "Код строки (тех.)",
     "amendment_id": "Доп. соглашение",
@@ -154,7 +155,7 @@ CATALOG_LABELS = {
     "units": "Единицы измерения",
     "tariff_rules": "Ставки",
     "staff": "Должности",
-    "warehouse_staff": "Штат ФОТ",
+    "warehouse_staff": "ФОТ ОХ",
     "vehicle_types": "Типы ТС",
     "roles": "Роли",
 }
@@ -185,9 +186,9 @@ CATALOG_HINTS = {
     "amendments": "Доп. соглашения (ДС) к договору. Загрузите файл Word — система создаст черновик ДС со ставками из таблицы.",
     "tariff_rules": "Основные ставки из ДС, дополнительные — согласованы отдельно (флаг «Доп. ставка»).",
     "warehouse_staff": (
-        "Должности, оклад (₽/мес без НДС) и численность по складу. "
-        "При изменении оклада или численности укажите дату «Действует с» — "
-        "создаётся новая версия для отчёта «ФОТ vs операционка»."
+        "Должности, оклад (₽/мес без НДС) и численность по складу ОХ. "
+        "«Действует с» — дата начала текущей версии; при смене оклада или численности "
+        "создаётся новая запись, старая сохраняется в истории. Используется в отчёте «Эффективность ОХ»."
     ),
 }
 
@@ -450,6 +451,7 @@ def _lookup_amendments() -> list[dict]:
             "contract_id": r.contract_id,
             "effective_from": r.effective_from.isoformat() if r.effective_from else None,
             "effective_to": r.effective_to.isoformat() if r.effective_to else None,
+            "auto_renew": bool(r.auto_renew),
             "status": r.status,
         }
         for r in rows
@@ -914,6 +916,11 @@ def warehouse_staff_update(item_id: int):
         db.session.rollback()
         if str(exc) == "not_found":
             return {"error": "not_found"}, 404
+        if str(exc) == "effective_from_invalid":
+            return {
+                "error": str(exc),
+                "message": "Дата «Действует с» не может быть раньше начала предыдущей версии",
+            }, 400
         return {"error": str(exc), "message": "Проверьте поля позиции"}, 400
     return row
 

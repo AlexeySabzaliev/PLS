@@ -100,7 +100,7 @@ def amendments_overview(user: dict) -> list[dict]:
                 "id": aid,
                 "number": am.number,
                 "status": am.status,
-                "auto_renew": False,
+                "auto_renew": bool(am.auto_renew),
                 "effective_from": am.effective_from.isoformat() if am.effective_from else None,
                 "effective_to": am.effective_to.isoformat() if am.effective_to else None,
                 "signed_date": None,

@@ -1,4 +1,4 @@
-"""Аутентификация: сессии, SSO, загрузка пользователя."""
+"""Аутентификация: сессии и вход по паролю."""
 from __future__ import annotations
 
 from functools import wraps
@@ -6,15 +6,15 @@ from functools import wraps
 from flask import g, jsonify, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from app.config import Config
-from app.core.sso import normalize_identity, resolve_sso_identity
 from app.db import db
 
 PUBLIC_PATHS = frozenset({
     "/api/health",
     "/api/auth/login",
-    "/api/auth/sso/config",
-    "/api/auth/sso/attempt",
+    "/api/auth/register",
+    "/api/auth/register-policy",
+    "/api/auth/password-policy",
+    "/api/auth/password-reset/request",
 })
 
 
@@ -29,7 +29,7 @@ def verify_password(password_hash: str | None, password: str) -> bool:
 
 
 def load_user_dict(user_id: int) -> dict | None:
-    from app.modules.reference.models import Role, User, UserRole, UserWarehouseAccess, Warehouse
+    from app.modules.reference.models import User, UserRole, UserWarehouseAccess, Warehouse
 
     user = db.session.get(User, user_id)
     if not user or not user.is_active:
@@ -48,6 +48,7 @@ def load_user_dict(user_id: int) -> dict | None:
         "role_codes": role_codes,
         "warehouse_ids": [w.id for w in warehouses],
         "warehouses": [{"id": w.id, "code": w.code, "name": w.name} for w in warehouses],
+        "has_password": bool(user.password_hash),
     }
 
 
@@ -60,30 +61,78 @@ def find_user_by_email(email: str):
     ).first()
 
 
-def attempt_sso_login(headers) -> dict | None:
-    raw = resolve_sso_identity(headers)
-    if not raw:
-        return None
-    email, _ = normalize_identity(raw)
-    user = find_user_by_email(email)
-    if not user:
-        from app.core.sso_access import record_sso_access_request
-
-        record_sso_access_request(raw)
-        return None
-    session["user_id"] = user.id
-    session.permanent = True
-    return load_user_dict(user.id)
-
-
-def login_user_password(email: str, password: str) -> dict | None:
+def login_user_password(email: str, password: str) -> tuple[dict | None, str | None]:
+    """Вход по email/паролю. Ошибки: invalid_credentials, no_password, inactive."""
     from app.modules.reference.models import User
 
-    user = User.query.filter(db.func.lower(User.email) == email.lower()).first()
-    if not user or not user.is_active or not verify_password(user.password_hash, password):
-        return None
+    norm = (email or "").strip().lower()
+    if not norm or not password:
+        return None, "invalid_credentials"
+    user = User.query.filter(db.func.lower(User.email) == norm).first()
+    if not user:
+        return None, "invalid_credentials"
+    if not user.is_active:
+        return None, "inactive"
+    if not user.password_hash:
+        return None, "no_password"
+    if not verify_password(user.password_hash, password):
+        return None, "invalid_credentials"
     session["user_id"] = user.id
     session.permanent = True
+    return load_user_dict(user.id), None
+
+
+def set_user_password(user_id: int, new_password: str, *, email: str | None = None) -> str | None:
+    """Установить пароль (админ). Возвращает код ошибки валидации или None."""
+    from app.core.passwords import validate_password
+    from app.modules.reference.models import User
+
+    ok, err = validate_password(new_password, email=email)
+    if not ok:
+        return err
+    user = db.session.get(User, user_id)
+    if not user:
+        return "not_found"
+    user.password_hash = hash_password(new_password)
+    db.session.commit()
+    return None
+
+
+def change_user_password(
+    user_id: int,
+    *,
+    current_password: str | None,
+    new_password: str,
+) -> str | None:
+    """Смена/установка пароля. Без текущего — только если пароль ещё не задан."""
+    from app.core.passwords import validate_password
+    from app.modules.reference.models import User
+
+    user = db.session.get(User, user_id)
+    if not user or not user.is_active:
+        return "not_found"
+    if user.password_hash:
+        if not current_password or not verify_password(user.password_hash, current_password):
+            return "invalid_current"
+        if verify_password(user.password_hash, new_password):
+            return "same_as_current"
+    ok, err = validate_password(new_password, email=user.email)
+    if not ok:
+        return err
+    user.password_hash = hash_password(new_password)
+    db.session.commit()
+    return None
+
+
+def update_user_profile(user_id: int, *, full_name: str | None) -> dict | None:
+    from app.modules.reference.models import User
+
+    user = db.session.get(User, user_id)
+    if not user or not user.is_active:
+        return None
+    if full_name is not None:
+        user.full_name = full_name.strip() or user.full_name
+    db.session.commit()
     return load_user_dict(user.id)
 
 
@@ -110,20 +159,29 @@ def login_required(view):
     return wrapped
 
 
+def edit_required(view):
+    """Запретить изменение данных роли «только просмотр отчётов»."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        from app.core.permissions import user_can_edit
+
+        if not user_can_edit(g.user):
+            return {"error": "forbidden", "message": "Доступ только на просмотр"}, 403
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
 def before_request_auth():
     path = request.path
-    if path in PUBLIC_PATHS or path.startswith("/static/"):
+    if path.startswith("/static/"):
         g.user = None
         return None
 
-    # Автовход SSO (как transport): заголовок IIS / Windows SSPI
-    if Config.SSO_ENABLED and (Config.SSO_MODE or "").lower() != "oidc":
-        if not session.get("user_id"):
-            attempt_sso_login(request.headers)
-
+    is_public = path in PUBLIC_PATHS
     if path.startswith("/api/"):
         user = get_current_user()
-        if not user and not path.startswith("/api/auth/"):
+        if not user and not is_public and not path.startswith("/api/auth/"):
             return jsonify({"error": "unauthorized", "message": "Требуется вход"}), 401
         g.user = user
     else:

@@ -1,4 +1,5 @@
 """Интеграция с порталом охраны."""
+import pytest
 
 
 def test_demo_security_plate_detection():
@@ -149,6 +150,59 @@ def test_resolve_security_cookie_rejects_bare_jwt(monkeypatch):
 
     monkeypatch.setenv("SECURITY_API_COOKIE", "eyJ1c2Vy.test.signature")
     assert sec._resolve_security_cookie() == ""
+
+
+def test_fetch_raw_requests_live_before_local_cache(monkeypatch):
+    """При SECURITY_USE_LOCAL_DB сначала портал, не устаревший локальный кэш."""
+    import app.modules.uss.services.security_intranet as sec
+    from datetime import date
+
+    monkeypatch.setattr(sec, "SECURITY_USE_LOCAL_DB", True)
+    monkeypatch.setattr(sec, "SECURITY_OFFLINE_ONLY", False)
+    live_row = {
+        "id": 9001,
+        "contractorName": "ООО Гауф",
+        "visitPlace": "Склад ГП",
+        "visitDateFrom": "2026-09-04",
+        "visitDateTo": "2026-09-04",
+        "hasVehicleAccess": True,
+        "vehicleNumber": "А111АА77",
+    }
+    monkeypatch.setattr(sec, "_fetch_live_requests", lambda *a, **k: ([live_row], "live"))
+    monkeypatch.setattr(
+        sec,
+        "_try_local_db",
+        lambda *a, **k: ([{"id": 1, "contractorName": "устаревшее"}], "local_db"),
+    )
+    cached: list[dict] = []
+    monkeypatch.setattr(sec, "_cache_live_rows", lambda rows: cached.extend(rows))
+
+    rows, src = sec._fetch_raw_requests("Склад ГП", date(2026, 9, 4))
+    assert src == "live+cache"
+    assert rows == [live_row]
+    assert cached == [live_row]
+
+
+def test_fetch_raw_requests_offline_only_uses_local(monkeypatch):
+    import app.modules.uss.services.security_intranet as sec
+    from datetime import date
+
+    monkeypatch.setattr(sec, "SECURITY_USE_LOCAL_DB", True)
+    monkeypatch.setattr(sec, "SECURITY_OFFLINE_ONLY", True)
+    monkeypatch.setattr(
+        sec,
+        "_try_local_db",
+        lambda *a, **k: ([{"id": 1}], "local_db"),
+    )
+    monkeypatch.setattr(
+        sec,
+        "_fetch_live_requests",
+        lambda *a, **k: pytest.fail("live must not be called"),
+    )
+
+    rows, src = sec._fetch_raw_requests("Склад ГП", date(2026, 9, 4))
+    assert src == "local_db"
+    assert len(rows) == 1
 
 
 def test_sync_security_after_oub_like_client(auth_client, client, app, monkeypatch):

@@ -5,16 +5,19 @@ from datetime import date
 
 from flask import Blueprint, g, request
 
-from app.core.auth import login_required
+from app.core.auth import login_required, edit_required
 from app.core.permissions import user_has_uss_section
 from app.db import db
 from app.modules.reference.models import Warehouse
 from app.modules.uss.services.fot_efficiency import build_fot_report
+from app.modules.uss.services.contracts_registry import build_contracts_registry_report
 from app.modules.uss.services.inventory_shift import get_inventory_shift, save_inventory_shift
 from app.modules.uss.services.report_schema import schema_for_contract_role
 from app.modules.uss.services.shift_day_confirm import confirm_day, day_summary
 from app.modules.uss.services.transport_shift import (
+    get_vehicle_audit_log,
     list_transport_shift,
+    mark_vehicle_no_show,
     save_transport_daily,
     save_vehicle_row,
     sync_transport_security,
@@ -48,6 +51,7 @@ def _api_result(result: dict, *, default_status: int = 400) -> tuple[dict, int]:
 
 @bp.post("/transport/vehicles")
 @login_required
+@edit_required
 def transport_vehicle_save():
     if not user_has_uss_section(g.user, "uss_ops_transport"):
         return {"error": "forbidden"}, 403
@@ -56,8 +60,33 @@ def transport_vehicle_save():
     return body, status
 
 
+@bp.post("/transport/vehicles/<int:vehicle_id>/no-show")
+@login_required
+@edit_required
+def transport_vehicle_no_show(vehicle_id: int):
+    if not user_has_uss_section(g.user, "uss_ops_transport"):
+        return {"error": "forbidden"}, 403
+    result = mark_vehicle_no_show(g.user, vehicle_id)
+    body, status = _api_result(result, default_status=404 if result.get("error") == "not_found" else 400)
+    return body, status
+
+
+@bp.get("/transport/vehicles/<int:vehicle_id>/audit")
+@login_required
+def transport_vehicle_audit(vehicle_id: int):
+    if not user_has_uss_section(g.user, "uss_ops_transport"):
+        return {"error": "forbidden"}, 403
+    result = get_vehicle_audit_log(g.user, vehicle_id)
+    if result.get("error") == "not_found":
+        return result, 404
+    if result.get("error"):
+        return result, 403
+    return result
+
+
 @bp.post("/transport/daily")
 @login_required
+@edit_required
 def transport_daily_save():
     if not user_has_uss_section(g.user, "uss_ops_transport"):
         return {"error": "forbidden"}, 403
@@ -68,6 +97,7 @@ def transport_daily_save():
 
 @bp.post("/transport/sync-security")
 @login_required
+@edit_required
 def transport_sync_security():
     if not user_has_uss_section(g.user, "uss_ops_transport"):
         return {"error": "forbidden"}, 403
@@ -95,6 +125,7 @@ def warehouse_shift_get():
 
 @bp.post("/warehouse/shift")
 @login_required
+@edit_required
 def warehouse_shift_save():
     if not user_has_uss_section(g.user, "uss_ops_warehouse"):
         return {"error": "forbidden"}, 403
@@ -118,6 +149,7 @@ def inventory_shift_get():
 
 @bp.post("/inventory/shift")
 @login_required
+@edit_required
 def inventory_shift_post():
     if not user_has_uss_section(g.user, "uss_ops_inventory"):
         return {"error": "forbidden"}, 403
@@ -136,6 +168,7 @@ def get_day_summary():
 
 @bp.post("/day-confirm")
 @login_required
+@edit_required
 def post_day_confirm():
     data = request.get_json(silent=True) or {}
     wh = data.get("warehouse_id")
@@ -234,7 +267,7 @@ def _can_access_warehouse(warehouse_id: int) -> bool:
 @bp.get("/reports/fot")
 @login_required
 def fot_report():
-    """Отчёт ФОТ vs операционка по складу и месяцу."""
+    """Отчёт «Эффективность ОХ» по складу и месяцу."""
     if not user_has_uss_section(g.user, "uss_reports"):
         return {"error": "forbidden"}, 403
 
@@ -254,5 +287,40 @@ def fot_report():
 
     contract_id = request.args.get("contract_id", type=int)
     report = build_fot_report(warehouse_id, year, month, contract_id=contract_id)
+    report["warehouses"] = [{"id": w.id, "code": w.code, "name": w.name} for w in warehouses]
+    return report
+
+
+@bp.get("/reports/contracts")
+@login_required
+def contracts_registry_report():
+    """Свод договоров и ДС по клиентам и статусам."""
+    if not user_has_uss_section(g.user, "uss_reports"):
+        return {"error": "forbidden"}, 403
+
+    warehouse_id = request.args.get("warehouse_id", type=int)
+    expiring_days = request.args.get("expiring_days", default=90, type=int)
+    status_filter = request.args.get("status_filter", default="all", type=str)
+
+    if warehouse_id is not None and not _can_access_warehouse(warehouse_id):
+        return {"error": "forbidden"}, 403
+
+    warehouses = _report_warehouses()
+    if not warehouses:
+        return {"error": "no_warehouses"}, 403
+
+    if warehouse_id is None:
+        warehouse_id = warehouses[0].id
+
+    allowed_filters = {"all", "active_contract", "active_amendment", "expiring"}
+    if status_filter not in allowed_filters:
+        status_filter = "all"
+
+    report = build_contracts_registry_report(
+        g.user,
+        warehouse_id=warehouse_id,
+        expiring_days=expiring_days,
+        status_filter=status_filter,
+    )
     report["warehouses"] = [{"id": w.id, "code": w.code, "name": w.name} for w in warehouses]
     return report

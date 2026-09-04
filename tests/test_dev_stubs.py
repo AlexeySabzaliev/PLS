@@ -40,6 +40,11 @@ def test_uss_home_nav(auth_client, client):
     assert "На главную" not in html
     assert "Ежесменные отчёты" not in html
     assert "операционного учёта" in html.lower()
+    assert "uss-intro-list" in html
+    assert "uss-intro-item-name" in html
+    # ссылки только в шапке, не в карточках главной
+    intro = html.split('class="uss-intro-grid"', 1)[1].split("</section>", 1)[0]
+    assert "<a " not in intro
 
 
 def test_security_portal_stub_alias(monkeypatch):

@@ -273,5 +273,15 @@ def test_warehouse_staff_effective_from_persisted(auth_client, client, app):
     versions2 = client.get(f"/api/reference/warehouse-staff/{pid}/versions")
     assert len(versions2.json["items"]) >= 2
 
+    date_only = client.put(
+        f"/api/reference/warehouse-staff/{pid}",
+        json={"effective_from": "2026-08-01"},
+    )
+    assert date_only.status_code == 200
+    listing3 = client.get(f"/api/reference/warehouse-staff?warehouse_id={wh_id}")
+    row3 = next(x for x in listing3.json["items"] if x["id"] == pid)
+    assert row3["effective_from"] == "2026-08-01"
+    assert row3["monthly_rate"] == 85000
+
     delete = client.delete(f"/api/reference/warehouse-staff/{pid}")
     assert delete.status_code == 200

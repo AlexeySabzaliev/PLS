@@ -1,18 +1,20 @@
 {% extends "uss/base.html" %}
 
-{% block title %}Складская логистика{% endblock %}
+{% block title %}Ежесменный отчёт складской логистики{% endblock %}
+
+{% block body_class %}uss-shift-page{% endblock %}
 
 {% block content %}
 
-  <h1>Складская смена</h1>
+  <h1 class="page-title">Ежесменный отчёт складской логистики</h1>
 
-  <p class="muted">Суточные допработы без привязки к ТС — поля из схемы договора.</p>
+  <p class="uss-shift-lead muted">Суточные допработы без привязки к ТС — поля из схемы договора.</p>
 
   <p id="status" class="status">Загрузка…</p>
 
-  <div id="toolbar"></div>
+  <div id="toolbar" class="uss-shift-toolbar"></div>
 
-  <div id="content"></div>
+  <div id="content" class="uss-shift-content"></div>
 
 {% endblock %}
 
@@ -21,4 +23,3 @@
   <script src="/static/js/uss_warehouse.js"></script>
 
 {% endblock %}
-

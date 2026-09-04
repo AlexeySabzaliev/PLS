@@ -1,0 +1,41 @@
+      <section class="login-panel" id="login-panel">
+        <h2>Вход в {{ app_short }}</h2>
+
+        <div id="login-main-panel">
+          <form id="login-form" class="login-form">
+            <label>Email <input type="email" name="email" required placeholder="ivanov@bsh-ru.ru" autocomplete="username"></label>
+            <label>Пароль <input type="password" name="password" required autocomplete="current-password"></label>
+            <button type="submit" class="ref-btn ref-btn--primary">Войти</button>
+          </form>
+          <p class="login-forgot">
+            <button type="button" class="link-btn link-btn--inline" id="btn-show-register">Регистрация</button>
+            <span class="muted"> · </span>
+            <button type="button" class="link-btn link-btn--inline" id="btn-show-reset">Забыли пароль?</button>
+          </p>
+        </div>
+
+        <div id="login-register-panel" class="login-mode-panel" hidden>
+          <form id="register-form" class="login-form">
+            <label>Email <input type="email" name="email" required placeholder="ivanov@bsh-ru.ru" autocomplete="username"></label>
+            <label>ФИО <input type="text" name="full_name" placeholder="Иванов Иван Иванович" autocomplete="name"></label>
+            <label>Пароль <input type="password" name="password" required autocomplete="new-password"></label>
+            <label>Повтор пароля <input type="password" name="confirm_password" required autocomplete="new-password"></label>
+            <p class="muted login-password-policy" id="register-password-hint"></p>
+            <button type="submit" class="ref-btn ref-btn--primary">Зарегистрироваться</button>
+          </form>
+          <p class="login-forgot"><button type="button" class="link-btn link-btn--inline" id="btn-register-to-login">← Уже есть учётная запись</button></p>
+        </div>
+
+        <div id="login-reset-panel" class="login-mode-panel" hidden>
+          <p class="muted">Укажите email учётной записи. Администратор сбросит пароль и сообщит вам новый.</p>
+          <form id="reset-form" class="login-form">
+            <label>Email <input type="email" name="email" required placeholder="ivanov@bsh-ru.ru" autocomplete="username"></label>
+            <label>Комментарий <input type="text" name="note" placeholder="Телефон для связи (необязательно)"></label>
+            <button type="submit" class="ref-btn ref-btn--primary">Отправить заявку</button>
+          </form>
+          <p class="login-forgot"><button type="button" class="link-btn link-btn--inline" id="btn-show-login">← Вернуться ко входу</button></p>
+        </div>
+
+        <p id="login-error" class="status error"></p>
+        <p id="login-info" class="status ok"></p>
+      </section>

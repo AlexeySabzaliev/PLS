@@ -245,6 +245,30 @@ def create_staff_position(warehouse_id: int, data: dict) -> dict:
     }
 
 
+def _apply_effective_from_change(position_id: int, new_from: date) -> None:
+    """Сдвинуть начало текущей открытой версии без смены оклада/численности."""
+    open_v = _open_version(position_id)
+    if not open_v:
+        raise ValueError("no_open_version")
+    if open_v.valid_from == new_from:
+        return
+
+    prior = (
+        WarehouseStaffPositionVersion.query.filter(
+            WarehouseStaffPositionVersion.position_id == position_id,
+            WarehouseStaffPositionVersion.id != open_v.id,
+        )
+        .order_by(WarehouseStaffPositionVersion.valid_from.desc())
+        .first()
+    )
+    if prior:
+        if new_from <= prior.valid_from:
+            raise ValueError("effective_from_invalid")
+        prior.valid_to = new_from - timedelta(days=1)
+
+    open_v.valid_from = new_from
+
+
 def update_staff_position(position_id: int, data: dict) -> dict:
     pos = db.session.get(WarehouseStaffPosition, position_id)
     if not pos:
@@ -259,9 +283,14 @@ def update_staff_position(position_id: int, data: dict) -> dict:
     rate_changed = "monthly_rate" in data and new_rate != _d(pos.monthly_rate)
     hc_changed = headcount is not None and new_headcount != int(pos.headcount)
     name_changed = "name" in data and new_name != pos.name
+    open_v = _open_version(pos.id)
+    current_ef = open_v.valid_from if open_v else None
+    new_ef = None
+    if data.get("effective_from"):
+        new_ef = date.fromisoformat(str(data["effective_from"])[:10])
 
     if rate_changed or hc_changed or name_changed:
-        effective_from = date.fromisoformat(str(data.get("effective_from") or date.today())[:10])
+        effective_from = new_ef or date.today()
         close_date = effective_from - timedelta(days=1)
         if close_date >= date(1900, 1, 1):
             _close_open_version(pos.id, close_date)
@@ -272,6 +301,17 @@ def update_staff_position(position_id: int, data: dict) -> dict:
             monthly_rate=new_rate,
             headcount=new_headcount,
             valid_from=effective_from,
+        )
+    elif new_ef and current_ef and new_ef != current_ef:
+        _apply_effective_from_change(pos.id, new_ef)
+    elif new_ef and not open_v:
+        _insert_version(
+            position_id=pos.id,
+            warehouse_id=pos.warehouse_id,
+            name=new_name,
+            monthly_rate=new_rate,
+            headcount=new_headcount,
+            valid_from=new_ef,
         )
 
     if "name" in data:

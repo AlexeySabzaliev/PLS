@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sys
 
 from dotenv import load_dotenv
 
@@ -48,15 +49,34 @@ class Config:
     MODULE_UZNT_NAME = os.environ.get("MODULE_UZNT_NAME", "УЗнТ")
     MODULE_USS_NAME = os.environ.get("MODULE_USS_NAME", "УСС")
     # Версия статики/HTML — меняйте при правках фронта (сброс кэша браузера)
-    PLS_BUILD_ID = os.environ.get("PLS_BUILD_ID", "20260903f")
+    PLS_BUILD_ID = os.environ.get("PLS_BUILD_ID", "20260904l")
 
-    SSO_ENABLED = os.getenv("SSO_ENABLED", "false").lower() in ("1", "true", "yes")
-    SSO_MODE = os.getenv("SSO_MODE", "headers").lower()
+    _is_dev = os.getenv("FLASK_ENV", "development").lower() != "production"
+    _sso_enabled_env = os.getenv("SSO_ENABLED")
+    if _sso_enabled_env is None:
+        SSO_ENABLED = sys.platform == "win32" and _is_dev
+    else:
+        SSO_ENABLED = _sso_enabled_env.lower() in ("1", "true", "yes")
+    _sso_mode_env = os.getenv("SSO_MODE")
+    if _sso_mode_env:
+        SSO_MODE = _sso_mode_env.lower()
+    elif not _is_dev:
+        SSO_MODE = "headers"
+    elif sys.platform == "win32":
+        SSO_MODE = "auto"
+    else:
+        SSO_MODE = "headers"
     SSO_USER_HEADER = os.getenv("SSO_USER_HEADER", "Remote-User")
     SSO_EMAIL_DOMAIN = os.getenv("SSO_EMAIL_DOMAIN", "bsh-ru.ru")
+    # Fallback GetUserNameExW — только локальная разработка; на сервере под службой бесполезен
+    _win_fb = os.getenv("SSO_ALLOW_WINDOWS_FALLBACK")
+    if _win_fb is None:
+        SSO_ALLOW_WINDOWS_FALLBACK = _is_dev
+    else:
+        SSO_ALLOW_WINDOWS_FALLBACK = _win_fb.lower() in ("1", "true", "yes")
     _sso_pw = os.getenv("SSO_ALLOW_PASSWORD_LOGIN")
     if _sso_pw is None:
-        SSO_ALLOW_PASSWORD_LOGIN = not SSO_ENABLED
+        SSO_ALLOW_PASSWORD_LOGIN = True
     else:
         SSO_ALLOW_PASSWORD_LOGIN = _sso_pw.lower() in ("1", "true", "yes")
     SSO_OIDC_ISSUER = os.getenv("SSO_OIDC_ISSUER", "")
@@ -65,6 +85,13 @@ class Config:
     SSO_OIDC_REDIRECT_URI = os.getenv("SSO_OIDC_REDIRECT_URI", "")
     SSO_OIDC_SCOPE = os.getenv("SSO_OIDC_SCOPE", "openid email profile")
     SSO_DEV_IDENTITY = os.getenv("SSO_DEV_IDENTITY", "").strip()
+
+    PASSWORD_MIN_LENGTH = max(6, int(os.getenv("PASSWORD_MIN_LENGTH", "8")))
+
+    PLS_REGISTRATION_ENABLED = _env_bool("PLS_REGISTRATION_ENABLED", True)
+    PLS_REGISTRATION_EMAIL_DOMAIN = (
+        os.getenv("PLS_REGISTRATION_EMAIL_DOMAIN") or os.getenv("SSO_EMAIL_DOMAIN") or "bsh-ru.ru"
+    ).strip().lstrip("@").lower()
 
     # Dev-заглушки интеграций (игнорируются в production)
     PLS_SSO_STUB = _env_bool("PLS_SSO_STUB")
@@ -110,6 +137,7 @@ class TestingConfig(Config):
     SSO_ALLOW_PASSWORD_LOGIN = True
     # Тесты не должны наследовать PLS_FREEZE_REFERENCE из .env prod/dev
     PLS_FREEZE_REFERENCE = False
+    PLS_REGISTRATION_EMAIL_DOMAIN = ""
 
 
 config = {

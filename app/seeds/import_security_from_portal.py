@@ -14,7 +14,7 @@ from app.modules.uss.services.security_intranet import (
     _row_matches_client,
     _vehicle_raw_from_row,
 )
-from app.modules.uss.services.security_session import get_authenticated_session
+from app.modules.uss.services.security_session import get_authenticated_session, security_refresh_hint
 from app.seeds.import_security_from_billings import CREATE_SQL
 
 logger = logging.getLogger(__name__)
@@ -76,10 +76,7 @@ def fetch_portal_rows(
     """Скачать заявки с портала и отфильтровать по периоду и клиентам."""
     session = get_authenticated_session(SECURITY_BASE_URL)
     if session is None:
-        raise RuntimeError(
-            "Нет SSO-сессии портала. Выполните: flask pls security-refresh-session "
-            "(нужен вход на security.bsh-ru.ru в Yandex)"
-        )
+        raise RuntimeError(security_refresh_hint())
 
     today_only = day_from == day_to == date.today()
     params = _live_api_params(visit_place, today_only=today_only)

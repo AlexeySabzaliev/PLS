@@ -1,31 +1,64 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="pls-build" content="{{ pls_build }}">
-  <title>Справочники — ПЛС</title>
-  <link rel="stylesheet" href="/static/css/main.css?v={{ pls_build }}">
-</head>
-<body{% if user and user.is_admin %} data-admin="1"{% endif %}>
-  <header class="pls-header">
-    {% include 'includes/pls_brand_uss.html' %}
-    {% set active = 'reference' %}
-    {% include 'includes/uss_header_nav.html' %}
-    {% if user %}
-    {% include 'includes/pls_user_bar.html' %}
-    {% endif %}
-  </header>
-  <main class="pls-main admin-ref">
-    <h1>Справочники</h1>
-    <p id="catalog-hint" class="muted">Выберите раздел слева. Для изменения записи нажмите «Изменить».</p>
-    <p id="status" class="status">Загрузка…</p>
-    <div class="ref-layout">
-      <nav id="catalog-nav" class="ref-nav" aria-label="Разделы справочников"></nav>
-      <section id="catalog-panel" class="ref-panel"></section>
-    </div>
-  </main>
-  <script src="/static/js/pls_header.js?v={{ pls_build }}"></script>
-  <script src="/static/js/reference-ui.js?v={{ pls_build }}"></script>
-</body>
-</html>
+<!DOCTYPE html>
+
+<html lang="ru">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta name="pls-build" content="{{ pls_build }}">
+
+  <title>Справочники — ПЛС</title>
+
+  <link rel="stylesheet" href="/static/css/main.css?v={{ pls_build }}">
+
+</head>
+
+<body{% if user and user.is_admin %} data-admin="1"{% endif %}>
+
+  <header class="pls-header">
+
+    {% include 'includes/pls_brand_uss.html' %}
+
+    {% set active = 'reference' %}
+
+    {% include 'includes/uss_header_nav.html' %}
+
+    {% if user %}
+
+    {% include 'includes/pls_user_bar.html' %}
+
+    {% endif %}
+
+  </header>
+
+  <main class="pls-main admin-ref">
+
+    <h1>Справочники</h1>
+
+    <p id="catalog-hint" class="muted">Выберите раздел слева. Для изменения записи нажмите «Изменить».</p>
+
+    <p id="status" class="status">Загрузка…</p>
+
+    <div class="ref-layout">
+
+      <nav id="catalog-nav" class="ref-nav" aria-label="Разделы справочников"></nav>
+
+      <section id="catalog-panel" class="ref-panel"></section>
+
+    </div>
+
+  </main>
+
+  <script src="/static/js/pls_header.js?v={{ pls_build }}"></script>
+
+  <script src="/static/js/access-admin.js?v={{ pls_build }}"></script>
+
+  <script src="/static/js/reference-ui.js?v={{ pls_build }}"></script>
+
+</body>
+
+</html>
+

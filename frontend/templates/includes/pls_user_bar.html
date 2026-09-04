@@ -1,6 +1,6 @@
 {% if user %}
 <span class="pls-user">
-  <span class="pls-user-email" title="{{ user.email }}">{{ user.email }}</span>
+  <a href="/profile" class="pls-user-profile" title="Профиль">{{ user.full_name or user.email }}</a>
   <button type="button" class="btn-header-logout" id="pls-logout-btn">Выйти</button>
 </span>
 {% endif %}

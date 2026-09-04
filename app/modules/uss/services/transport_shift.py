@@ -1,4 +1,4 @@
-"""Транспортная смена: vehicle_operations + суточные допы."""
+"""Ежесменный отчёт транспортной логистики: vehicle_operations + суточные допы."""
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -9,7 +9,7 @@ from app.modules.billing.period_lock import (
     assert_operations_editable,
     periods_status_for_contracts,
 )
-from app.modules.reference.models import Client, Contract, ProductType, VehicleType, Warehouse
+from app.modules.reference.models import Client, Contract, ProductType, User, VehicleType, Warehouse
 from app.modules.uss.services.shift_contracts import (
     contracts_for_transport_shift,
     serialize_primary_shift_blocks,
@@ -26,6 +26,7 @@ from app.modules.uss.services.security_intranet import (
     purge_demo_security_vehicles,
     security_status,
 )
+from app.modules.uss.services.security_session import security_refresh_hint
 from app.modules.uss.services.shift_handling import sync_handling_m3_updates
 from app.modules.uss.services.transport_waybills import (
     load_waybills_for_operations,
@@ -33,6 +34,18 @@ from app.modules.uss.services.transport_waybills import (
     waybills_from_legacy_row,
 )
 from app.modules.uss.services.overtime import row_is_overtime
+from app.modules.uss.services.vehicle_audit import (
+    ACTION_LABELS,
+    _serialize_row_snapshot,
+    list_vehicle_audit,
+    log_vehicle_change,
+)
+from app.modules.uss.services.vehicle_validation import (
+    ARRIVAL_NO_SHOW,
+    is_row_complete,
+    missing_required_fields,
+    row_field_values,
+)
 from app.modules.uss.services.vehicle_plates import combine_vehicle_plates, parse_vehicle_plates
 
 REPORT_ROLE = "transport_logistics"
@@ -132,6 +145,37 @@ def _legacy_fix_operation_handling(row: VehicleOperation) -> tuple[str | None, s
     return op, handling
 
 
+def _processed_by_name(user_id: int | None) -> str | None:
+    if not user_id:
+        return None
+    user = db.session.get(User, user_id)
+    if not user:
+        return None
+    return (user.full_name or "").strip() or user.email
+
+
+def _apply_completion_state(row: VehicleOperation, values: dict, user: dict | None) -> str:
+    """Обновить processed_by/at по заполненности. Возвращает action для журнала."""
+    was_complete = bool(row.processed_at)
+    if values.get("arrival_status") == ARRIVAL_NO_SHOW:
+        if not row.processed_at:
+            row.processed_by = user.get("id") if user else None
+            row.processed_at = datetime.utcnow()
+            return "no_show"
+        return "update"
+    if is_row_complete(values):
+        if not row.processed_at:
+            row.processed_by = user.get("id") if user else None
+            row.processed_at = datetime.utcnow()
+            return "complete"
+        return "update"
+    if row.processed_at:
+        row.processed_by = None
+        row.processed_at = None
+        return "reopen"
+    return "update"
+
+
 def _serialize_vehicle(row: VehicleOperation, waybills_map: dict[int, list[dict]]) -> dict:
     tractor = row.tractor_plate
     trailer = row.trailer_plate
@@ -141,10 +185,19 @@ def _serialize_vehicle(row: VehicleOperation, waybills_map: dict[int, list[dict]
     rq = dict(row.report_quantities or {})
     waybills = waybills_map.get(row.id) or waybills_from_legacy_row(row)
     vt = db.session.get(VehicleType, row.vehicle_type_id) if row.vehicle_type_id else None
+    values = row_field_values(row)
+    missing = missing_required_fields(values)
+    complete = is_row_complete(values)
     return {
         "id": row.id,
         "contract_id": row.contract_id,
         "source": row.source or "manual",
+        "arrival_status": row.arrival_status or "expected",
+        "is_complete": complete,
+        "missing_fields": missing,
+        "processed_by": row.processed_by,
+        "processed_by_name": _processed_by_name(row.processed_by),
+        "processed_at": row.processed_at.isoformat() if row.processed_at else None,
         "plate_number": row.plate_number or combine_vehicle_plates(tractor, trailer),
         "tractor_plate": tractor,
         "trailer_plate": trailer,
@@ -260,16 +313,19 @@ def save_vehicle_row(user: dict, payload: dict) -> dict:
     except PeriodLockedError as exc:
         return {"error": "period_locked", "message": str(exc)}
     row_id = payload.get("id")
+    before_snapshot = None
     if row_id:
         row = db.session.get(VehicleOperation, row_id)
         if not row:
             return {"error": "not_found"}
+        before_snapshot = _serialize_row_snapshot(row)
     else:
         row = VehicleOperation(
             contract_id=payload["contract_id"],
             warehouse_id=wh_id,
             operation_date=op_date,
             source="manual",
+            arrival_status="expected",
         )
         db.session.add(row)
 
@@ -285,6 +341,9 @@ def save_vehicle_row(user: dict, payload: dict) -> dict:
             elif key in ("extra_document_set_qty",) and val == "":
                 val = None
             setattr(row, key, val)
+
+    if "arrival_status" in payload and payload["arrival_status"] != ARRIVAL_NO_SHOW:
+        row.arrival_status = payload["arrival_status"]
 
     row.registered_at = _parse_time_on_date(op_date, payload.get("registered_at"))
     row.departed_at = _parse_time_on_date(op_date, payload.get("departed_at"))
@@ -307,8 +366,49 @@ def save_vehicle_row(user: dict, payload: dict) -> dict:
     if "waybills" in payload:
         replace_waybills(row.id, payload.get("waybills") or [], row.operation_type_code or "inbound")
 
+    values = row_field_values(row)
+    audit_action = _apply_completion_state(row, values, user)
+    if before_snapshot is None:
+        audit_action = "create"
+    log_vehicle_change(row, user=user, action=audit_action, before=before_snapshot)
+
     db.session.commit()
-    return {"id": row.id, "saved": True}
+    wb_map = load_waybills_for_operations([row.id])
+    return {"id": row.id, "saved": True, "vehicle": _serialize_vehicle(row, wb_map)}
+
+
+def mark_vehicle_no_show(user: dict, vehicle_id: int) -> dict:
+    row = db.session.get(VehicleOperation, vehicle_id)
+    if not row:
+        return {"error": "not_found"}
+    wh_ids = user.get("warehouse_ids") or []
+    if row.warehouse_id not in wh_ids and not user.get("is_admin"):
+        return {"error": "forbidden"}
+    try:
+        assert_operations_editable(user, row.contract_id, row.operation_date)
+    except PeriodLockedError as exc:
+        return {"error": "period_locked", "message": str(exc)}
+    before = _serialize_row_snapshot(row)
+    row.arrival_status = ARRIVAL_NO_SHOW
+    row.processed_by = user.get("id")
+    row.processed_at = datetime.utcnow()
+    log_vehicle_change(row, user=user, action="no_show", before=before)
+    db.session.commit()
+    wb_map = load_waybills_for_operations([row.id])
+    return {"ok": True, "vehicle": _serialize_vehicle(row, wb_map)}
+
+
+def get_vehicle_audit_log(user: dict, vehicle_id: int) -> dict:
+    row = db.session.get(VehicleOperation, vehicle_id)
+    if not row:
+        return {"error": "not_found"}
+    wh_ids = user.get("warehouse_ids") or []
+    if row.warehouse_id not in wh_ids and not user.get("is_admin"):
+        return {"error": "forbidden"}
+    items = list_vehicle_audit(vehicle_id)
+    for item in items:
+        item["action_label"] = ACTION_LABELS.get(item["action"], item["action"])
+    return {"items": items, "action_labels": ACTION_LABELS}
 
 
 def save_transport_daily(user: dict, payload: dict) -> dict:
@@ -360,9 +460,11 @@ def _upsert_security_vehicle(
         operation_type_code="inbound",
         source="security",
         security_request_id=security_request_id,
+        arrival_status="expected",
     )
     db.session.add(row)
     db.session.flush()
+    log_vehicle_change(row, user=None, action="sync_security", before=None)
     return row.id
 
 
@@ -419,29 +521,6 @@ def sync_transport_security(user: dict, warehouse_id: int, day: date) -> dict:
             "synced": len(rows),
             "source": source,
         })
-        # #region agent log
-        try:
-            import json
-            import time
-            from pathlib import Path
-            _log = Path(__file__).resolve().parents[4] / "debug-48a3e2.log"
-            payload = {
-                "sessionId": "48a3e2",
-                "hypothesisId": "H3",
-                "location": "transport_shift.sync_transport_security",
-                "message": "contract sync batch",
-                "data": {
-                    "contract_id": contract.id,
-                    "client": client.name if client else None,
-                    "rows": len(rows),
-                    "assigned_total": len(assigned_requests),
-                },
-                "timestamp": int(time.time() * 1000),
-            }
-            with _log.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
-        except OSError:
-            pass
         # #endregion
         skipped = contract_stats.get("skipped_no_plate", 0)
         if skipped:
@@ -481,10 +560,7 @@ def sync_transport_security(user: dict, warehouse_id: int, day: date) -> dict:
     message = None
     if total == 0:
         if "unauthorized" in sources or "no_auth" in sources:
-            message = (
-                "Нет SSO-сессии портала охраны. Войдите на https://security.bsh-ru.ru в Yandex "
-                "(доменная учётка) и выполните: flask pls security-refresh-session"
-            )
+            message = security_refresh_hint()
         elif "stub" in sources:
             message = "Режим заглушки SECURITY_PORTAL_STUB — демо-заявки без портала."
         else:
@@ -492,6 +568,14 @@ def sync_transport_security(user: dict, warehouse_id: int, day: date) -> dict:
                 f"Заявок в портале: {len(prefetched)}, подходящих по клиенту и складу: 0. "
                 "Проверьте имя клиента и «Место визита СБ» у склада."
             )
+    elif "live" in sources or "live+cache" in sources:
+        if total == 0:
+            message = (
+                f"Заявок в портале: {len(prefetched)}, подходящих по клиенту и складу: 0. "
+                "Проверьте имя клиента и «Место визита СБ» у склада."
+            )
+        elif "live+cache" in sources:
+            message = "Данные загружены с портала и сохранены в локальный кэш для тестов."
     elif "mock_fallback" in sources or "stub" in sources:
         message = "Загружены демо-данные охраны (портал недоступен или включена заглушка)."
 

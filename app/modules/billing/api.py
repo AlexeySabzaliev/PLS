@@ -6,7 +6,7 @@ from datetime import date
 from flask import Blueprint, g, request, send_file
 import io
 
-from app.core.auth import login_required
+from app.core.auth import login_required, edit_required
 from app.core.permissions import user_has_uss_section
 from app.db import db
 from app.modules.billing.calculator import BillingCalculator
@@ -91,6 +91,7 @@ def billing_period_get():
 
 @bp.post("/period/lock")
 @login_required
+@edit_required
 def billing_period_lock():
     if not user_has_uss_section(g.user, "uss_billing"):
         return _FORBIDDEN, 403
@@ -115,6 +116,7 @@ def billing_period_lock():
 
 @bp.post("/period/unlock")
 @login_required
+@edit_required
 def billing_period_unlock():
     if not user_has_uss_section(g.user, "uss_billing"):
         return _FORBIDDEN, 403
@@ -132,6 +134,7 @@ def billing_period_unlock():
 
 @bp.post("/calculate")
 @login_required
+@edit_required
 def calculate():
     if not user_has_uss_section(g.user, "uss_billing"):
         return _FORBIDDEN, 403

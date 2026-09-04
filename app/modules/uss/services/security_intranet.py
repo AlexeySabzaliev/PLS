@@ -15,11 +15,13 @@
   visitDateFrom/To    → активность заявки на дату смены
   hasVehicleAccess    → пропуск заявок без доступа ТС
 
-Переменные окружения:
+Переменные окружения (см. docs/SECURITY_PORTAL.md):
+  SECURITY_AUTH_MODE — negotiate | cookie | browser | local_db | stub
   SECURITY_BASE_URL — URL портала (по умолчанию https://security.bsh-ru.ru)
-  SECURITY_API_COOKIE — cookie сессии портала (альтернатива Negotiate)
-  SECURITY_USE_NEGOTIATE — Windows SSPI (по умолчанию true на Windows)
-  SECURITY_PORTAL_STUB / SECURITY_USE_MOCK — демо-заявки без обращения к порталу
+  SECURITY_USE_NEGOTIATE — SSPI учётки службы Windows (prod)
+  SECURITY_API_COOKIE / SECURITY_COOKIE_FILE — сессия по cookie
+  SECURITY_USE_LOCAL_DB — dev: локальный кэш заявок
+  SECURITY_PORTAL_STUB — dev: демо-заявки
 """
 from __future__ import annotations
 
@@ -65,23 +67,27 @@ def _agent_log(hypothesis_id: str, location: str, message: str, data: dict | Non
         pass
     # #endregion
 
+from app.modules.uss.services.security_config import (
+    resolve_security_auth_mode,
+    security_auth_mode_label,
+    security_auto_browser_cookies,
+    security_offline_only,
+    security_use_local_db,
+    security_use_mock,
+    security_use_negotiate,
+)
+
 SECURITY_BASE_URL = os.getenv("SECURITY_BASE_URL", "https://security.bsh-ru.ru").rstrip("/")
 SECURITY_API_COOKIE = os.getenv("SECURITY_API_COOKIE", "")
 SECURITY_COOKIE_FILE = os.getenv("SECURITY_COOKIE_FILE", "").strip()
-SECURITY_USE_LOCAL_DB = os.getenv("SECURITY_USE_LOCAL_DB", "").lower() in ("1", "true", "yes")
+SECURITY_USE_LOCAL_DB = security_use_local_db()
 SECURITY_LOCAL_FALLBACK = os.getenv("SECURITY_LOCAL_FALLBACK", "").lower() in ("1", "true", "yes")
-_negotiate_default = "true" if sys.platform == "win32" else "false"
-SECURITY_USE_NEGOTIATE = os.getenv("SECURITY_USE_NEGOTIATE", _negotiate_default).lower() in (
-    "1",
-    "true",
-    "yes",
-)
+SECURITY_OFFLINE_ONLY = security_offline_only()
+SECURITY_USE_NEGOTIATE = security_use_negotiate()
 
 
 def _use_mock() -> bool:
-    if os.getenv("SECURITY_PORTAL_STUB", "").lower() in ("1", "true", "yes"):
-        return True
-    return os.getenv("SECURITY_USE_MOCK", "").lower() in ("1", "true", "yes")
+    return security_use_mock()
 
 
 @dataclass
@@ -116,33 +122,54 @@ def _negotiate_auth():
 def security_status() -> dict:
     """Публичный статус для UI — без технических деталей."""
     stub = _use_mock()
-    has_auth = (
-        bool(_resolve_security_cookie())
-        or SESSION_JAR.is_file()
-        or _negotiate_auth() is not None
-        or SECURITY_USE_LOCAL_DB
-        or os.getenv("SECURITY_AUTO_BROWSER_COOKIES", "1").lower() in ("1", "true", "yes")
-    )
-    available = stub or has_auth
-    demo_fallback = not available
-    if SECURITY_USE_LOCAL_DB:
-        source = "local"
-        label = "локальная БД (SECURITY_USE_LOCAL_DB)"
-    elif stub:
+    auth_mode = resolve_security_auth_mode()
+    auth_label = security_auth_mode_label(auth_mode)
+    is_dev_fallback = auth_mode in ("browser", "local_db", "stub") or SECURITY_USE_LOCAL_DB
+
+    if stub:
+        has_auth = True
+    elif auth_mode == "negotiate":
+        has_auth = _negotiate_auth() is not None
+    elif auth_mode == "cookie":
+        has_auth = bool(_resolve_security_cookie()) or SESSION_JAR.is_file()
+    elif auth_mode == "browser":
+        has_auth = security_auto_browser_cookies()
+    elif auth_mode == "local_db":
+        has_auth = SECURITY_USE_LOCAL_DB or SECURITY_OFFLINE_ONLY
+    else:
+        has_auth = False
+
+    available = stub or has_auth or SECURITY_USE_LOCAL_DB
+    demo_fallback = not available and not stub
+
+    if stub:
         source = "stub"
-        label = "заглушка (SECURITY_PORTAL_STUB)"
+        label = "заглушка (dev)"
+    elif SECURITY_OFFLINE_ONLY and SECURITY_USE_LOCAL_DB:
+        source = "local"
+        label = "локальный кэш (тест, без портала)"
+    elif SECURITY_USE_LOCAL_DB:
+        source = "local_cache"
+        label = "портал + локальный кэш (тест)"
+    elif auth_mode == "negotiate":
+        source = "remote"
+        label = "портал (SSO сервера)"
     elif demo_fallback:
         source = "demo"
         label = "демо (нет доступа к порталу)"
     else:
         source = "remote"
         label = "портал security.bsh-ru.ru"
+
     return {
         "available": available or demo_fallback,
         "source": source,
         "label": label,
         "stub": stub,
         "has_auth": has_auth,
+        "auth_mode": auth_mode,
+        "auth_label": auth_label,
+        "is_dev_fallback": is_dev_fallback,
     }
 
 
@@ -501,26 +528,23 @@ def _try_local_db(visit_place: str | None, day: date) -> tuple[list[dict], str]:
     return rows, src
 
 
-def _fetch_raw_requests(visit_place: str | None, day: date) -> tuple[list[dict], str]:
-    if _use_mock():
-        return [], "mock"
-    if SECURITY_USE_LOCAL_DB:
-        rows, src = _try_local_db(visit_place, day)
-        return rows or [], src if rows else "local_db"
+def _cache_live_rows(rows: list[dict]) -> None:
+    """Сохранить ответ портала в security_admission_form для offline-тестов."""
+    if not rows:
+        return
+    try:
+        from app.seeds.import_security_from_portal import upsert_portal_rows
 
+        upsert_portal_rows(rows, verbose=False)
+    except Exception as exc:
+        logger.warning("security cache upsert failed: %s", exc)
+
+
+def _fetch_live_requests(visit_place: str | None, day: date) -> tuple[list[dict], str]:
+    """Запрос к API портала (нужна SSO-сессия)."""
     params = _live_api_params(visit_place, day)
     session = _live_session()
     if session is None:
-        if SECURITY_LOCAL_FALLBACK:
-            rows, src = _try_local_db(visit_place, day)
-            if rows:
-                return rows, src
-        _agent_log(
-            "H1",
-            "security_intranet._fetch_raw_requests",
-            "no live session",
-            {"visit_place": visit_place, "day": day.isoformat()},
-        )
         return [], "no_auth"
 
     try:
@@ -528,20 +552,12 @@ def _fetch_raw_requests(visit_place: str | None, day: date) -> tuple[list[dict],
         if resp.status_code == 401:
             session = _live_session(refresh=True)
             if session is None:
-                if SECURITY_LOCAL_FALLBACK:
-                    rows, src = _try_local_db(visit_place, day)
-                    if rows:
-                        return rows, src
                 return [], "unauthorized"
             resp = session.get(f"{SECURITY_BASE_URL}/api/requests", params=params, timeout=25)
         if resp.status_code == 401:
-            if SECURITY_LOCAL_FALLBACK:
-                rows, src = _try_local_db(visit_place, day)
-                if rows:
-                    return rows, src
             _agent_log(
                 "H1",
-                "security_intranet._fetch_raw_requests",
+                "security_intranet._fetch_live_requests",
                 "live api unauthorized",
                 {"visit_place": visit_place, "day": day.isoformat()},
             )
@@ -551,22 +567,52 @@ def _fetch_raw_requests(visit_place: str | None, day: date) -> tuple[list[dict],
         rows = payload.get("rows") or []
         _agent_log(
             "H2",
-            "security_intranet._fetch_raw_requests",
+            "security_intranet._fetch_live_requests",
             "live api rows",
             {"rows": len(rows), "day": day.isoformat(), "visit_place": visit_place, "params": params},
         )
-        if not rows and SECURITY_LOCAL_FALLBACK:
-            local_rows, local_src = _try_local_db(visit_place, day)
-            if local_rows:
-                return local_rows, local_src
         return rows, "live"
     except Exception as exc:
         logger.warning("security fetch failed: %s", exc)
-        if SECURITY_LOCAL_FALLBACK:
-            rows, src = _try_local_db(visit_place, day)
-            if rows:
-                return rows, src
         return [], f"error:{exc}"
+
+
+def _fetch_raw_requests(visit_place: str | None, day: date) -> tuple[list[dict], str]:
+    if _use_mock():
+        return [], "mock"
+
+    # SECURITY_USE_LOCAL_DB: сначала портал (если есть SSO), локальная таблица — fallback для offline.
+    # SECURITY_OFFLINE_ONLY=1 — только локальный дамп/SQL (без сети).
+    if SECURITY_OFFLINE_ONLY:
+        rows, src = _try_local_db(visit_place, day)
+        return rows or [], src if rows else "local_db"
+
+    live_rows, live_src = _fetch_live_requests(visit_place, day)
+    if live_src == "live":
+        if live_rows and SECURITY_USE_LOCAL_DB:
+            _cache_live_rows(live_rows)
+            return live_rows, "live+cache"
+        return live_rows, "live"
+
+    if SECURITY_USE_LOCAL_DB or SECURITY_LOCAL_FALLBACK:
+        rows, src = _try_local_db(visit_place, day)
+        if rows:
+            if live_src == "no_auth":
+                src = f"{src}_offline"
+            elif live_src.startswith("error:"):
+                src = f"{src}_fallback"
+            return rows, src
+        if SECURITY_USE_LOCAL_DB:
+            return [], "local_db"
+
+    if live_src in ("no_auth", "unauthorized"):
+        _agent_log(
+            "H1",
+            "security_intranet._fetch_raw_requests",
+            "no live session",
+            {"visit_place": visit_place, "day": day.isoformat()},
+        )
+    return live_rows, live_src
 
 
 def fetch_vehicle_requests(

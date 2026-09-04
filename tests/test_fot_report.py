@@ -103,7 +103,7 @@ def test_fot_report_page_has_toolbar(auth_client, client):
     resp = client.get("/uss/reports/fot")
     text = resp.get_data(as_text=True)
     assert resp.status_code == 200
-    assert "ФОТ vs операционка" in text
+    assert "Эффективность ОХ" in text
     assert 'id="toolbar"' in text
     assert "uss_fot.js" in text
 
@@ -112,7 +112,7 @@ def test_fot_report_page(auth_client, client):
     auth_client("admin@test.local", "admin")
     resp = client.get("/uss/reports/fot")
     assert resp.status_code == 200
-    assert "ФОТ vs операционка" in resp.get_data(as_text=True)
+    assert "Эффективность ОХ" in resp.get_data(as_text=True)
 
 
 def test_reports_hub(auth_client, client):

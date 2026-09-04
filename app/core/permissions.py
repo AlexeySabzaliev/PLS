@@ -3,11 +3,12 @@ from __future__ import annotations
 
 ROLE_CODES = frozenset({
     "admin",
-    "supervisor",
     "transport_logistics",
     "warehouse_logistics",
     "commercial_logistics",
     "inventory_management",
+    "ved_specialist",
+    "reports_viewer",
 })
 
 # УЗнТ — заявки (заглушки фазы 0)
@@ -15,6 +16,7 @@ REQUEST_SECTIONS: dict[str, frozenset[str]] = {
     "admin": frozenset({"request_analytics"}),
     "transport_logistics": frozenset({"requests_view_all", "requests_transport"}),
     "commercial_logistics": frozenset({"requests_view_all", "tenders", "request_analytics"}),
+    "ved_specialist": frozenset({"requests_view_all", "tenders", "request_analytics"}),
 }
 
 # УСС — операционный учёт
@@ -26,7 +28,6 @@ USS_SECTIONS: dict[str, frozenset[str]] = {
         "uss_ops_warehouse", "uss_ops_inventory", "uss_billing",
         "uss_process_lines", "uss_reports",
     }),
-    "supervisor": frozenset({"uss_admin", "uss_catalog_locations", "uss_process_lines"}),
     "transport_logistics": frozenset({"uss_ops_transport", "uss_catalog_vehicle_types"}),
     "warehouse_logistics": frozenset({"uss_ops_warehouse"}),
     "inventory_management": frozenset({"uss_ops_inventory"}),
@@ -34,6 +35,7 @@ USS_SECTIONS: dict[str, frozenset[str]] = {
         "uss_catalog_clients", "uss_catalog_contracts", "uss_catalog_amendments",
         "uss_catalog_rates", "uss_billing", "uss_process_lines", "uss_reports",
     }),
+    "reports_viewer": frozenset({"uss_reports"}),
 }
 
 # Справочники (общие)
@@ -44,7 +46,6 @@ REFERENCE_SECTIONS: dict[str, frozenset[str]] = {
     "commercial_logistics": frozenset({
         "ref_clients", "ref_contracts", "ref_amendments", "ref_tariff_codes",
     }),
-    "supervisor": frozenset({"ref_locations", "ref_roles", "ref_permissions"}),
 }
 
 
@@ -60,7 +61,25 @@ def effective_role_codes(user: dict | None) -> set[str]:
 def user_can_manage(user: dict | None) -> bool:
     if not user:
         return False
-    return bool(user.get("is_admin") or effective_role_codes(user) & {"admin", "supervisor"})
+    return bool(user.get("is_admin") or "admin" in effective_role_codes(user))
+
+
+def user_is_reports_only(user: dict | None) -> bool:
+    """Только просмотр отчётов — без редактирования и прочих разделов."""
+    if not user or user.get("is_admin"):
+        return False
+    codes = effective_role_codes(user)
+    if not codes:
+        return False
+    return codes <= {"reports_viewer"}
+
+
+def user_can_edit(user: dict | None) -> bool:
+    if not user:
+        return False
+    if user.get("is_admin"):
+        return True
+    return not user_is_reports_only(user)
 
 
 def _has_section(user: dict | None, section: str, matrix: dict[str, frozenset[str]]) -> bool:

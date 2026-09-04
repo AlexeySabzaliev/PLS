@@ -10,6 +10,8 @@
   let items = [];
   let lookups = {};
   let showAdvanced = false;
+  let showAddForm = false;
+  let showStaffAddForm = false;
   const editingRows = new Set();
   const editingAmendments = new Set();
   const pendingNewRows = new Set();
@@ -200,7 +202,7 @@
 
     if (fm.lookup) {
       const opts = lookupOptions(fm.lookup, row);
-      let html = `<select data-field="${f}" ${disabled ? 'disabled' : ''}>`;
+      let html = `<select class="ref-input" data-field="${f}" ${disabled ? 'disabled' : ''}>`;
       html += '<option value="">—</option>';
       opts.forEach((o) => {
         const sel = Number(val) === o.id ? ' selected' : '';
@@ -212,14 +214,14 @@
 
     if (fm.type === 'bool') {
       const chk = val ? 'checked' : '';
-      return `<input type="checkbox" data-field="${f}" ${chk} ${disabled ? 'disabled' : ''}>`;
+      return `<input type="checkbox" class="ref-input" data-field="${f}" ${chk} ${disabled ? 'disabled' : ''}>`;
     }
 
     if (fm.type === 'select' && fm.choices) {
       if (f === 'billing_line_code') {
         return billingLineSelectHtml(fm, val, disabled);
       }
-      let html = `<select data-field="${f}" ${disabled ? 'disabled' : ''}>`;
+      let html = `<select class="ref-input" data-field="${f}" ${disabled ? 'disabled' : ''}>`;
       fm.choices.forEach((c) => {
         const sel = String(val ?? '') === String(c.value) ? ' selected' : '';
         html += `<option value="${esc(c.value)}"${sel}>${esc(c.label)}</option>`;
@@ -229,19 +231,19 @@
     }
 
     if (fm.type === 'date') {
-      return `<input type="date" data-field="${f}" value="${esc(val ?? '')}" ${disabled ? 'readonly' : ''}>`;
+      return `<input type="date" class="ref-input" data-field="${f}" value="${esc(val ?? '')}" ${disabled ? 'readonly' : ''}>`;
     }
 
     if (fm.type === 'time') {
       const tval = val ? String(val).slice(0, 5) : '';
-      return `<input type="time" data-field="${f}" value="${esc(tval)}" ${disabled ? 'readonly' : ''}>`;
+      return `<input type="time" class="ref-input" data-field="${f}" value="${esc(tval)}" ${disabled ? 'readonly' : ''}>`;
     }
 
     if (f === 'rate_ex_vat') {
-      return `<input type="number" step="0.0001" data-field="${f}" value="${esc(val ?? '')}" ${disabled ? 'readonly' : ''}>`;
+      return `<input type="number" class="ref-input" step="0.0001" data-field="${f}" value="${esc(val ?? '')}" ${disabled ? 'readonly' : ''}>`;
     }
 
-    return `<input type="text" data-field="${f}" value="${esc(val ?? '')}" ${disabled ? 'readonly' : ''}>`;
+    return `<input type="text" class="ref-input" data-field="${f}" value="${esc(val ?? '')}" ${disabled ? 'readonly' : ''}>`;
   }
 
   function formatDateRu(iso) {
@@ -264,7 +266,7 @@
     if (!am || unlinked) return 'без ДС';
     let label = `ДС №${am.number || am.id}`;
     const from = formatDateRu(am.effective_from);
-    const to = formatDateRu(am.effective_to);
+    const to = am.auto_renew ? '∞' : formatDateRu(am.effective_to);
     if (from) {
       label += to ? ` (${from} — ${to})` : ` (с ${from})`;
     }
@@ -326,6 +328,7 @@
         <label><span>№ ДС</span><input data-am-field="number" value="${esc(am.number ?? '')}" required></label>
         <label><span>Действует с</span><input type="date" data-am-field="effective_from" value="${esc(am.effective_from ?? '')}"></label>
         <label><span>Действует до</span><input type="date" data-am-field="effective_to" value="${esc(am.effective_to ?? '')}"></label>
+        <label class="ref-checkbox-label"><input type="checkbox" data-am-field="auto_renew"${am.auto_renew ? ' checked' : ''}><span>Автопролонгация (∞)</span></label>
         <label><span>Статус</span>${statusHtml}</label>
         <div class="ref-group-actions">
           <button type="submit" class="btn-save-am">Сохранить ДС</button>
@@ -489,12 +492,12 @@
       if (!readOnly) {
         html += '<td class="row-actions">';
         if (rowEditing) {
-          html += '<button type="button" class="btn-save">Сохранить</button>';
-          html += '<button type="button" class="btn-cancel">Отмена</button>';
+          html += '<button type="button" class="ref-btn ref-btn--primary btn-save">Сохранить</button>';
+          html += '<button type="button" class="ref-btn ref-btn--ghost btn-cancel">Отмена</button>';
         } else {
-          html += '<button type="button" class="btn-edit">Изменить</button>';
+          html += '<button type="button" class="ref-btn ref-btn--ghost btn-edit">Изменить</button>';
           if (current !== 'product_types') {
-            html += '<button type="button" class="btn-del">Удалить</button>';
+            html += '<button type="button" class="ref-btn ref-btn--danger btn-del">Удалить</button>';
           }
         }
         if (current === 'amendments') {
@@ -649,14 +652,21 @@
 
   function renderAddForm(cat) {
     const fields = (cat.field_meta || []).filter((f) => !f.readonly);
-    let html = '<h3>Добавить</h3><form id="add-form" class="add-form ref-add-form">';
+    if (!showAddForm) {
+      return '<div class="ref-form-toolbar"><button type="button" class="ref-btn ref-btn--primary" id="btn-show-add-form">+ Добавить</button></div>';
+    }
+    let html = '<div class="ref-add-panel"><div class="ref-add-panel-head">';
+    html += '<h3>Новая запись</h3>';
+    html += '<button type="button" class="ref-btn ref-btn--ghost" id="btn-hide-add-form">Отмена</button>';
+    html += '</div><form id="add-form" class="add-form ref-add-form">';
     fields.forEach((fm) => {
       if (fm.advanced && !showAdvanced) return;
       html += `<label class="field-row"><span>${esc(fm.label)}</span>`;
       html += addFieldHtml(fm);
       html += '</label>';
     });
-    html += '<button type="submit">Создать</button></form>';
+    html += '<div class="ref-add-form-actions"><button type="submit" class="ref-btn ref-btn--primary">Создать</button></div>';
+    html += '</form></div>';
     return html;
   }
 
@@ -664,7 +674,7 @@
     const f = fm.field;
     if (fm.lookup) {
       const opts = lookupOptions(fm.lookup, {});
-      let html = `<select name="${f}">`;
+      let html = `<select class="ref-input" name="${f}">`;
       html += '<option value="">—</option>';
       opts.forEach((o) => {
         html += `<option value="${o.id}">${esc(o.label)}</option>`;
@@ -672,25 +682,25 @@
       html += '</select>';
       return html;
     }
-    if (fm.type === 'bool') return `<input type="checkbox" name="${f}">`;
+    if (fm.type === 'bool') return `<input type="checkbox" class="ref-input" name="${f}">`;
     if (fm.type === 'select' && fm.choices) {
       if (f === 'billing_line_code') {
         return billingLineSelectHtml(fm, '', false, { nameAttr: ` name="${f}"` });
       }
-      let html = `<select name="${f}">`;
+      let html = `<select class="ref-input" name="${f}">`;
       fm.choices.forEach((c) => {
         html += `<option value="${esc(c.value)}">${esc(c.label)}</option>`;
       });
       html += '</select>';
       return html;
     }
-    if (fm.type === 'date') return `<input type="date" name="${f}">`;
+    if (fm.type === 'date') return `<input type="date" class="ref-input" name="${f}">`;
     if (fm.type === 'time') {
       const defVal = f === 'work_day_start' ? '09:00' : (f === 'work_day_end' ? '17:30' : '');
-      return `<input type="time" name="${f}" value="${defVal}">`;
+      return `<input type="time" class="ref-input" name="${f}" value="${defVal}">`;
     }
-    if (f === 'rate_ex_vat') return `<input type="number" step="0.0001" name="${f}">`;
-    return `<input type="text" name="${f}">`;
+    if (f === 'rate_ex_vat') return `<input type="number" class="ref-input" step="0.0001" name="${f}">`;
+    return `<input type="text" class="ref-input" name="${f}">`;
   }
 
   function renderAmendmentImport() {
@@ -708,7 +718,7 @@
           <label class="field-row"><span>Файл .docx</span>
             <input type="file" name="file" accept=".docx" required>
           </label>
-          <button type="submit" id="import-am-submit">Загрузить и создать черновик</button>
+          <button type="submit" class="ref-btn ref-btn--primary" id="import-am-submit">Загрузить и создать черновик</button>
         </form>
       </section>`;
   }
@@ -818,6 +828,15 @@
 
     const addForm = document.getElementById('add-form');
     if (addForm) addForm.addEventListener('submit', onAdd);
+
+    document.getElementById('btn-show-add-form')?.addEventListener('click', () => {
+      showAddForm = true;
+      renderCurrent();
+    });
+    document.getElementById('btn-hide-add-form')?.addEventListener('click', () => {
+      showAddForm = false;
+      renderCurrent();
+    });
 
     const importForm = document.getElementById('import-am-form');
     if (importForm) importForm.addEventListener('submit', onImportAmendment);
@@ -1041,6 +1060,7 @@
       });
       setStatus('Создано.');
       form.reset();
+      showAddForm = false;
       await loadItems();
     } catch (err) {
       setStatus(err.message, true);
@@ -1164,6 +1184,19 @@
   }
 
   function renderCurrent() {
+    if (current === 'user_access') {
+      if (window.PlsAccessAdmin) {
+        window.PlsAccessAdmin.render({
+          panelEl,
+          statusEl,
+          setStatus,
+          setHintVisible,
+        });
+      } else {
+        panelEl.innerHTML = '<p class="status error">Модуль access-admin.js не загружен.</p>';
+      }
+      return;
+    }
     const cat = catMeta();
     if (cat.custom_ui && current === 'warehouse_staff') {
       renderWarehouseStaff();
@@ -1195,6 +1228,55 @@
     return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
   }
 
+  function whStaffSnapshot(p) {
+    return encodeURIComponent(JSON.stringify({
+      name: p.name,
+      monthly_rate: Number(p.monthly_rate),
+      headcount: Number(p.headcount),
+      effective_from: p.effective_from || '',
+      sort_order: Number(p.sort_order ?? 100),
+    }));
+  }
+
+  function whStaffRowPayload(row) {
+    const get = (f) => row.querySelector(`[data-f="${f}"]`)?.value;
+    let snap = {};
+    try {
+      snap = JSON.parse(decodeURIComponent(row.dataset.snapshot || '%7B%7D'));
+    } catch { /* ignore */ }
+    const name = get('name')?.trim();
+    const monthlyRate = Number(get('monthly_rate'));
+    const headcount = Number(get('headcount'));
+    const effectiveFrom = get('effective_from');
+    const sortOrder = get('sort_order');
+    const payload = {};
+    if (name !== snap.name) payload.name = name;
+    if (monthlyRate !== Number(snap.monthly_rate)) payload.monthly_rate = monthlyRate;
+    if (headcount !== Number(snap.headcount)) payload.headcount = headcount;
+    if (String(sortOrder) !== String(snap.sort_order)) payload.sort_order = sortOrder;
+    const dateChanged = effectiveFrom && effectiveFrom !== (snap.effective_from || '');
+    if (payload.name || payload.monthly_rate != null || payload.headcount != null || dateChanged) {
+      payload.effective_from = effectiveFrom;
+    }
+    return payload;
+  }
+
+  async function saveStaffRow(row) {
+    const payload = whStaffRowPayload(row);
+    if (!Object.keys(payload).length) {
+      editingRows.delete(String(row.dataset.id));
+      await renderWarehouseStaff();
+      return;
+    }
+    await api(`/api/reference/warehouse-staff/${row.dataset.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    editingRows.delete(String(row.dataset.id));
+    setStatus('Сохранено');
+    await renderWarehouseStaff();
+  }
+
   async function renderWarehouseStaff() {
     const cat = catMeta();
     setHintVisible(Boolean(cat.hint));
@@ -1205,46 +1287,70 @@
     const fotTotal = items.reduce((s, p) => s + Number(p.monthly_total || 0), 0);
     const whOpts = (lookups.warehouses || []).map((w) => `<option value="${w.id}">${esc(w.label)}</option>`).join('');
 
+    const rowsHtml = items.length ? items.map((p) => {
+      const eff = p.effective_from || todayIso();
+      const editing = editingRows.has(String(p.id));
+      const snap = whStaffSnapshot(p);
+      const cells = editing ? `
+        <td>${esc(whMap[p.warehouse_id] || p.warehouse_id)}</td>
+        <td><input class="ref-input" data-f="name" value="${esc(p.name)}"></td>
+        <td><input class="ref-input" data-f="monthly_rate" type="number" min="0" step="0.01" value="${p.monthly_rate}"></td>
+        <td><input class="ref-input" data-f="headcount" type="number" min="1" step="1" value="${p.headcount}"></td>
+        <td class="wh-staff-total">${fmtMoney(p.monthly_total)}</td>
+        <td><input class="ref-input" data-f="effective_from" type="date" value="${esc(eff)}"></td>
+        <td><input class="ref-input ref-input--narrow" data-f="sort_order" type="number" value="${p.sort_order ?? 100}"></td>`
+        : `
+        <td>${esc(whMap[p.warehouse_id] || p.warehouse_id)}</td>
+        <td>${esc(p.name)}</td>
+        <td>${fmtMoney(p.monthly_rate)}</td>
+        <td>${p.headcount}</td>
+        <td>${fmtMoney(p.monthly_total)}</td>
+        <td>${fmtDateShort(eff)}</td>
+        <td>${p.sort_order ?? 100}</td>`;
+      const actions = editing
+        ? `<button type="button" class="ref-btn ref-btn--primary wh-staff-save">Сохранить</button>
+           <button type="button" class="ref-btn ref-btn--ghost wh-staff-cancel">Отмена</button>`
+        : `<button type="button" class="ref-btn ref-btn--ghost wh-staff-edit">Изменить</button>
+           <button type="button" class="ref-btn ref-btn--ghost wh-staff-history">История</button>
+           <button type="button" class="ref-btn ref-btn--danger wh-staff-del">Удалить</button>`;
+      return `<tr class="wh-staff-row${editing ? ' editing' : ''}" data-id="${p.id}" data-snapshot="${snap}">${cells}
+        <td class="row-actions">${actions}</td></tr>`;
+    }).join('') : '<tr><td colspan="8" class="muted">Нет позиций</td></tr>';
+
+    const addPanel = showStaffAddForm ? `
+      <div class="ref-add-panel">
+        <div class="ref-add-panel-head">
+          <h3>Новая позиция</h3>
+          <button type="button" class="ref-btn ref-btn--ghost" id="wh-staff-hide-add">Отмена</button>
+        </div>
+        <form id="wh-staff-add-form" class="ref-add-form">
+          <label class="field-row"><span>Склад</span><select class="ref-input" name="warehouse_id" required>${whOpts}</select></label>
+          <label class="field-row"><span>Должность</span><input class="ref-input" name="name" required placeholder="Оператор"></label>
+          <label class="field-row"><span>Оклад, ₽/мес</span><input class="ref-input" name="monthly_rate" type="number" min="0" step="0.01" required></label>
+          <label class="field-row"><span>Кол-во</span><input class="ref-input" name="headcount" type="number" min="1" step="1" value="1" required></label>
+          <label class="field-row"><span>Действует с</span><input class="ref-input" name="effective_from" type="date" value="${todayIso()}" required></label>
+          <label class="field-row"><span>Порядок</span><input class="ref-input ref-input--narrow" name="sort_order" type="number" value="100"></label>
+          <div class="ref-add-form-actions"><button type="submit" class="ref-btn ref-btn--primary">Создать</button></div>
+        </form>
+      </div>` : '';
+
     panelEl.innerHTML = `
-      <p class="muted">Суммарный ФОТ: <strong>${fmtMoney(fotTotal)}</strong> ₽/мес (текущие оклады). При смене оклада укажите дату начала действия.</p>
-      <table class="data-table ref-table">
+      <h2>${esc(cat.label || 'ФОТ ОХ')}</h2>
+      <p class="muted">Суммарный ФОТ: <strong>${fmtMoney(fotTotal)}</strong> ₽/мес. «Действует с» — дата текущей версии; при смене оклада создаётся новая запись в истории.</p>
+      <div class="table-wrap"><table class="data-table ref-table">
         <thead><tr>
           <th>Склад</th><th>Должность</th><th>Оклад, ₽/мес</th><th>Кол-во</th><th>ФОТ, ₽/мес</th>
           <th>Действует с</th><th>Порядок</th><th></th>
         </tr></thead>
-        <tbody id="wh-staff-tbody">
-          ${items.length ? items.map((p) => {
-            const eff = p.effective_from || todayIso();
-            const snap = encodeURIComponent(JSON.stringify({
-              name: p.name,
-              monthly_rate: Number(p.monthly_rate),
-              headcount: Number(p.headcount),
-            }));
-            return `
-            <tr class="wh-staff-row" data-id="${p.id}" data-snapshot="${snap}">
-              <td><span class="catalog-static">${esc(whMap[p.warehouse_id] || p.warehouse_id)}</span></td>
-              <td><input data-f="name" value="${esc(p.name)}"></td>
-              <td><input data-f="monthly_rate" type="number" min="0" step="0.01" value="${p.monthly_rate}"></td>
-              <td><input data-f="headcount" type="number" min="1" step="1" value="${p.headcount}"></td>
-              <td class="wh-staff-total">${fmtMoney(p.monthly_total)}</td>
-              <td><input data-f="effective_from" type="date" value="${esc(eff)}" title="Дата новой версии при изменении оклада или численности"></td>
-              <td><input data-f="sort_order" type="number" value="${p.sort_order ?? 100}"></td>
-              <td class="wh-staff-actions">
-                <button type="button" class="btn btn-sm wh-staff-history" title="История окладов">История</button>
-                <button type="button" class="btn btn-danger btn-sm wh-staff-del">Удалить</button>
-              </td>
-            </tr>`;
-          }).join('') : '<tr><td colspan="8" class="muted">Нет позиций</td></tr>'}
-        </tbody>
-      </table>
+        <tbody id="wh-staff-tbody">${rowsHtml}</tbody>
+      </table></div>
       <div id="wh-staff-history" class="wh-staff-history hidden"></div>
-      <div class="ref-actions" style="margin-top:0.75rem">
-        <button type="button" class="btn" id="wh-staff-add">Добавить позицию</button>
-        <button type="button" class="btn btn-primary" id="wh-staff-save">Сохранить</button>
-      </div>`;
+      <div class="ref-form-toolbar">
+        <button type="button" class="ref-btn ref-btn--primary" id="wh-staff-show-add">+ Добавить позицию</button>
+      </div>
+      ${addPanel}`;
 
     const historyEl = document.getElementById('wh-staff-history');
-    const tbody = document.getElementById('wh-staff-tbody');
     const recalc = (row) => {
       const rate = Number(row.querySelector('[data-f="monthly_rate"]')?.value || 0);
       const hc = Number(row.querySelector('[data-f="headcount"]')?.value || 0);
@@ -1269,7 +1375,7 @@
           <thead><tr><th>С</th><th>По</th><th>Должность</th><th>Оклад</th><th>Кол-во</th></tr></thead>
           <tbody>${rows || '<tr><td colspan="5" class="muted">Нет версий</td></tr>'}</tbody>
         </table>
-        <button type="button" class="btn btn-sm" id="wh-staff-history-close">Закрыть</button>`;
+        <button type="button" class="ref-btn ref-btn--ghost" id="wh-staff-history-close">Закрыть</button>`;
       document.getElementById('wh-staff-history-close')?.addEventListener('click', () => {
         historyEl.classList.add('hidden');
         historyEl.innerHTML = '';
@@ -1280,10 +1386,26 @@
       row.querySelectorAll('[data-f="monthly_rate"], [data-f="headcount"]').forEach((inp) => {
         inp.addEventListener('input', () => recalc(row));
       });
-      row.querySelector('.wh-staff-history')?.addEventListener('click', async () => {
-        const name = row.querySelector('[data-f="name"]')?.value || '';
+      row.querySelector('.wh-staff-edit')?.addEventListener('click', () => {
+        editingRows.add(String(row.dataset.id));
+        renderWarehouseStaff();
+      });
+      row.querySelector('.wh-staff-cancel')?.addEventListener('click', () => {
+        editingRows.delete(String(row.dataset.id));
+        renderWarehouseStaff();
+      });
+      row.querySelector('.wh-staff-save')?.addEventListener('click', async () => {
+        setStatus('Сохранение…');
         try {
-          await showHistory(row.dataset.id, name);
+          await saveStaffRow(row);
+        } catch (e) {
+          setStatus(e.message, true);
+        }
+      });
+      row.querySelector('.wh-staff-history')?.addEventListener('click', async () => {
+        const p = items.find((x) => String(x.id) === String(row.dataset.id));
+        try {
+          await showHistory(row.dataset.id, p?.name || '');
         } catch (e) {
           setStatus(e.message, true);
         }
@@ -1296,67 +1418,39 @@
       });
     });
 
-    document.getElementById('wh-staff-add')?.addEventListener('click', () => {
-      tbody.querySelector('.muted')?.closest('tr')?.remove();
-      const tr = document.createElement('tr');
-      tr.className = 'wh-staff-row wh-staff-new';
-      tr.innerHTML = `
-        <td><select data-f="warehouse_id">${whOpts}</select></td>
-        <td><input data-f="name" placeholder="Оператор" required></td>
-        <td><input data-f="monthly_rate" type="number" min="0" step="0.01"></td>
-        <td><input data-f="headcount" type="number" min="1" step="1" value="1"></td>
-        <td class="wh-staff-total">0</td>
-        <td><input data-f="effective_from" type="date" value="${todayIso()}"></td>
-        <td><input data-f="sort_order" type="number" value="100"></td>
-        <td></td>`;
-      tbody.appendChild(tr);
-      tr.querySelectorAll('[data-f="monthly_rate"], [data-f="headcount"]').forEach((inp) => {
-        inp.addEventListener('input', () => recalc(tr));
-      });
+    document.getElementById('wh-staff-show-add')?.addEventListener('click', () => {
+      showStaffAddForm = true;
+      renderWarehouseStaff();
     });
-
-    document.getElementById('wh-staff-save')?.addEventListener('click', async () => {
-      setStatus('Сохранение…');
+    document.getElementById('wh-staff-hide-add')?.addEventListener('click', () => {
+      showStaffAddForm = false;
+      renderWarehouseStaff();
+    });
+    document.getElementById('wh-staff-add-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const payload = {};
+      form.querySelectorAll('[name]').forEach((el) => {
+        if (el.value !== '') payload[el.name] = el.value;
+      });
+      setStatus('Создание…');
       try {
-        for (const row of panelEl.querySelectorAll('.wh-staff-new')) {
-          const get = (f) => row.querySelector(`[data-f="${f}"]`)?.value;
-          await api('/api/reference/warehouse-staff', {
-            method: 'POST',
-            body: JSON.stringify({
-              warehouse_id: Number(get('warehouse_id')),
-              name: get('name')?.trim(),
-              monthly_rate: get('monthly_rate'),
-              headcount: get('headcount'),
-              sort_order: get('sort_order'),
-              effective_from: get('effective_from'),
-            }),
-          });
-        }
-        for (const row of panelEl.querySelectorAll('.wh-staff-row:not(.wh-staff-new)')) {
-          const get = (f) => row.querySelector(`[data-f="${f}"]`)?.value;
-          let snap = {};
-          try {
-            snap = JSON.parse(decodeURIComponent(row.dataset.snapshot || '%7B%7D'));
-          } catch { /* ignore */ }
-          const name = get('name')?.trim();
-          const monthlyRate = Number(get('monthly_rate'));
-          const headcount = Number(get('headcount'));
-          const payload = { sort_order: get('sort_order') };
-          if (name !== snap.name) payload.name = name;
-          if (monthlyRate !== Number(snap.monthly_rate)) payload.monthly_rate = monthlyRate;
-          if (headcount !== Number(snap.headcount)) payload.headcount = headcount;
-          if (payload.name || payload.monthly_rate != null || payload.headcount != null) {
-            payload.effective_from = get('effective_from');
-          }
-          await api(`/api/reference/warehouse-staff/${row.dataset.id}`, {
-            method: 'PUT',
-            body: JSON.stringify(payload),
-          });
-        }
-        setStatus('Сохранено');
+        await api('/api/reference/warehouse-staff', {
+          method: 'POST',
+          body: JSON.stringify({
+            warehouse_id: Number(payload.warehouse_id),
+            name: payload.name?.trim(),
+            monthly_rate: payload.monthly_rate,
+            headcount: payload.headcount,
+            sort_order: payload.sort_order,
+            effective_from: payload.effective_from,
+          }),
+        });
+        showStaffAddForm = false;
+        setStatus('Создано');
         await renderWarehouseStaff();
-      } catch (e) {
-        setStatus(e.message, true);
+      } catch (err) {
+        setStatus(err.message, true);
       }
     });
   }
@@ -1375,11 +1469,12 @@
       navEl.appendChild(btn);
     });
     if (document.body.dataset.admin === '1') {
-      const sso = document.createElement('a');
-      sso.href = '/admin/sso';
-      sso.className = 'ref-nav-item ref-nav-item--admin';
-      sso.textContent = 'Заявки SSO';
-      navEl.appendChild(sso);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = current === 'user_access' ? 'active ref-nav-item--admin' : 'ref-nav-item--admin';
+      btn.textContent = 'Пользователи и доступ';
+      btn.addEventListener('click', () => selectCatalog('user_access'));
+      navEl.appendChild(btn);
     }
   }
 
@@ -1400,6 +1495,10 @@
       renderCurrent();
       return;
     }
+    if (current === 'user_access') {
+      renderCurrent();
+      return;
+    }
     const data = await api(`/api/reference/${current}`);
     items = data.items || [];
     renderCurrent();
@@ -1414,10 +1513,16 @@
     expandedAmendments.clear();
     tariffExpandCaptured = false;
     showAdvanced = false;
-    setHintVisible(false);
+    showAddForm = false;
+    showStaffAddForm = false;
+    setHintVisible(code !== 'user_access');
     renderNav();
     setStatus('Загрузка…');
     try {
+      if (code === 'user_access') {
+        await loadItems();
+        return;
+      }
       await loadLookups(true);
       await loadItems();
       const cat = catMeta();
@@ -1441,10 +1546,14 @@
       renderNav();
       const qs = new URLSearchParams(window.location.search);
       const initial = qs.get('catalog');
+      if (initial === 'user_access' && document.body.dataset.admin === '1') {
+        await selectCatalog('user_access');
+        return;
+      }
       const first = (initial && meta.some((c) => c.code === initial)) ? initial : meta[0].code;
       await selectCatalog(first);
     } catch (e) {
-      setStatus(e.message === 'unauthorized' ? 'Войдите через SSO или /api/auth/login' : e.message, true);
+      setStatus(e.message === 'unauthorized' ? 'Войдите в систему' : e.message, true);
     }
   }
 

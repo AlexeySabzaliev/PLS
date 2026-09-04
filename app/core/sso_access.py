@@ -3,15 +3,42 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.core.sso import normalize_identity
+from app.core.sso import identity_lookup_emails, normalize_identity
 from app.db import db
-from app.modules.reference.models import SsoAccessRequest, User
+from app.modules.reference.models import SsoAccessRequest
 
 
-def record_sso_access_request(raw_identity: str) -> SsoAccessRequest:
-    email, local = normalize_identity(raw_identity)
-    email = email.lower()
-    display = local or email.split("@", 1)[0]
+def _pick_request_email(raw_identity: str, preferred_email: str | None = None) -> str:
+    if preferred_email and "@" in preferred_email:
+        return preferred_email.strip().lower()
+    emails = identity_lookup_emails(raw_identity)
+    if emails:
+        return emails[0]
+    norm, _ = normalize_identity(raw_identity)
+    return norm.lower()
+
+
+def get_sso_access_status(email: str) -> dict:
+    row = SsoAccessRequest.query.filter_by(email=email.lower()).first()
+    if not row:
+        return {"pending": False, "login_attempts": 0}
+    return {
+        "pending": row.status == "pending",
+        "login_attempts": row.login_attempts or 0,
+        "status": row.status,
+    }
+
+
+def record_sso_access_request(
+    raw_identity: str,
+    *,
+    preferred_email: str | None = None,
+    display_name: str | None = None,
+    note: str | None = None,
+) -> SsoAccessRequest:
+    email = _pick_request_email(raw_identity, preferred_email)
+    _, local = normalize_identity(raw_identity)
+    display = (display_name or "").strip() or local or email.split("@", 1)[0]
     row = SsoAccessRequest.query.filter_by(email=email).first()
     now = datetime.utcnow()
     if row:
@@ -19,8 +46,10 @@ def record_sso_access_request(raw_identity: str) -> SsoAccessRequest:
             row.login_attempts = (row.login_attempts or 0) + 1
         row.last_seen_at = now
         row.raw_identity = raw_identity
-        if not row.display_name:
+        if display_name:
             row.display_name = display
+        if note:
+            row.admin_note = note
     else:
         row = SsoAccessRequest(
             email=email,
@@ -30,6 +59,7 @@ def record_sso_access_request(raw_identity: str) -> SsoAccessRequest:
             login_attempts=1,
             first_seen_at=now,
             last_seen_at=now,
+            admin_note=note or None,
         )
         db.session.add(row)
     db.session.commit()
@@ -71,28 +101,33 @@ def dismiss_sso_request(request_id: int, admin_user_id: int, note: str | None = 
     return {"ok": True, "request": _serialize_request(row)}
 
 
-def approve_sso_request(request_id: int, admin_user_id: int, *, note: str | None = None) -> dict:
-    """Одобрить: создать пользователя без ролей (роли назначает админ)."""
+def approve_sso_request(
+    request_id: int,
+    admin_user_id: int,
+    *,
+    note: str | None = None,
+    role_codes: list[str] | None = None,
+    warehouse_ids: list[int] | None = None,
+    is_admin: bool = False,
+) -> dict:
+    """Одобрить заявку: создать/активировать пользователя и назначить роли."""
+    from app.core.user_admin import provision_user_from_sso
+
     row = db.session.get(SsoAccessRequest, request_id)
     if not row or row.status != "pending":
         return {"error": "not_found"}
-    user = User.query.filter(db.func.lower(User.email) == row.email.lower()).first()
-    created = False
-    if not user:
-        user = User(
-            email=row.email,
-            full_name=row.display_name or row.email.split("@", 1)[0],
-            is_active=True,
-            is_admin=False,
-        )
-        db.session.add(user)
-        created = True
-    elif not user.is_active:
-        user.is_active = True
+    user, created = provision_user_from_sso(
+        email=row.email,
+        full_name=row.display_name,
+        role_codes=role_codes,
+        warehouse_ids=warehouse_ids,
+        is_admin=is_admin,
+    )
     row.status = "approved"
     row.resolved_at = datetime.utcnow()
     row.resolved_by = admin_user_id
-    row.admin_note = (note or "").strip() or None
+    if note:
+        row.admin_note = note.strip()
     db.session.commit()
     return {
         "ok": True,

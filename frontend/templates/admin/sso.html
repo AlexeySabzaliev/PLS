@@ -1,28 +1,76 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Заявки SSO — ПЛС</title>
-  <link rel="stylesheet" href="/static/css/main.css?v=20260903c">
-</head>
-<body>
-  <header class="pls-header">
-    {% include 'includes/pls_brand_uss.html' %}
-    {% set active = 'reference' %}
-    {% include 'includes/uss_header_nav.html' %}
-    {% if user %}
-    {% include 'includes/pls_user_bar.html' %}
-    {% endif %}
-  </header>
-  <main class="pls-main admin-ref">
-    <p class="muted"><a href="/admin/reference">← Справочники</a></p>
-    <h1>Заявки на доступ (SSO)</h1>
-    <p class="muted">Пользователь вошёл через SSO, но его нет в БД. Одобрите — будет создана учётка без ролей.</p>
-    <p id="status" class="status">Загрузка…</p>
-    <div id="requests"></div>
-  </main>
-  <script src="/static/js/pls_header.js"></script>
-  <script src="/static/js/sso-admin.js"></script>
-</body>
-</html>
+{% extends "uss/base.html" %}
+
+{% block title %}Пользователи и доступ{% endblock %}
+
+{% block main_class %}admin-ref{% endblock %}
+
+{% block content %}
+  <p class="muted"><a href="/admin/reference">← Справочники</a></p>
+  <h1 class="page-title">Пользователи и доступ</h1>
+  <p class="muted">
+    Учётные записи ПЛС по email (постоянный идентификатор при входе через Windows SSO).
+    Назначьте роли УСС и УЗнТ и доступ к складам — пользователь получит их при следующем входе.
+  </p>
+
+  <p id="status" class="status">Загрузка…</p>
+
+  <section class="access-panel" id="panel-pending">
+    <h2>Заявки SSO <span id="pending-badge" class="access-badge">0</span></h2>
+    <p class="muted">Пользователь вошёл через SSO, но его нет в системе. Одобрите и сразу назначьте роли.</p>
+    <div id="requests"></div>
+  </section>
+
+  <section class="access-panel" id="panel-add">
+    <h2>Добавить пользователя</h2>
+    <form id="form-add-user" class="access-user-form">
+      <div class="access-form-grid">
+        <label class="access-field">
+          <span>Email</span>
+          <input type="email" name="email" required placeholder="ivanov@bsh-ru.ru" autocomplete="off">
+        </label>
+        <label class="access-field">
+          <span>ФИО / отображаемое имя</span>
+          <input type="text" name="full_name" placeholder="Иванов И.И.">
+        </label>
+      </div>
+      <div id="add-roles" class="access-role-groups"></div>
+      <div id="add-warehouses" class="access-wh-list"></div>
+      <label class="access-checkbox"><input type="checkbox" name="is_admin"> Администратор ПЛС</label>
+      <div class="access-form-actions">
+        <button type="submit" class="ref-btn ref-btn--primary">Создать</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="access-panel" id="panel-users">
+    <h2>Пользователи</h2>
+    <label class="access-checkbox access-filter">
+      <input type="checkbox" id="show-inactive" checked> Показывать неактивных
+    </label>
+    <div id="users-table-wrap"></div>
+  </section>
+
+  <dialog id="dlg-edit-user" class="access-dialog">
+    <form method="dialog" id="form-edit-user" class="access-user-form">
+      <h3>Редактирование</h3>
+      <p class="muted" id="edit-email-label"></p>
+      <input type="hidden" name="user_id">
+      <label class="access-field">
+        <span>ФИО</span>
+        <input type="text" name="full_name">
+      </label>
+      <div id="edit-roles" class="access-role-groups"></div>
+      <div id="edit-warehouses" class="access-wh-list"></div>
+      <label class="access-checkbox"><input type="checkbox" name="is_admin"> Администратор ПЛС</label>
+      <label class="access-checkbox"><input type="checkbox" name="is_active" checked> Активен</label>
+      <div class="access-form-actions">
+        <button type="submit" class="ref-btn ref-btn--primary">Сохранить</button>
+        <button type="button" class="ref-btn" id="btn-edit-cancel">Отмена</button>
+      </div>
+    </form>
+  </dialog>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/access-admin.js?v={{ pls_build }}"></script>
+{% endblock %}

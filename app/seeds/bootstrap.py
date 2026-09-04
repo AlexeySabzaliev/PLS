@@ -50,11 +50,12 @@ WAREHOUSES = [
 
 ROLE_DEFINITIONS = [
     ("admin", "Администратор"),
-    ("supervisor", "Руководитель смены"),
+    ("commercial_logistics", "Коммерческая логистика"),
     ("transport_logistics", "Транспортная логистика"),
     ("warehouse_logistics", "Складская логистика"),
     ("inventory_management", "Управление запасами"),
-    ("commercial_logistics", "Коммерческая логистика"),
+    ("ved_specialist", "Специалист ВЭД"),
+    ("reports_viewer", "Просмотр отчётов"),
 ]
 
 
@@ -311,10 +312,7 @@ def seed_test_fixtures() -> None:
     )
     ensure_ariston_tariffs(contract.id, am.id, valid_from=date(2025, 1, 1))
 
-    for code, name in [
-        ("admin", "Администратор"),
-        ("transport_logistics", "Транспортная логистика"),
-    ]:
+    for code, name in ROLE_DEFINITIONS:
         db.session.add(Role(code=code, name=name))
     db.session.flush()
 

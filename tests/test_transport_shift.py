@@ -129,3 +129,46 @@ def test_vehicle_overtime_in_shift_list(auth_client, client):
     shift = client.get("/api/uss/transport/shift?warehouse_id=1&date=2026-08-03").json
     row = next(v for v in shift["vehicles"] if v["tractor_plate"] == "О777ОО77")
     assert row["is_overtime"] is True
+
+
+def test_vehicle_complete_without_trailer(auth_client, client):
+    auth_client("transport@test.local", "test")
+    payload = {
+        "warehouse_id": 1,
+        "contract_id": 1,
+        "operation_date": "2026-08-05",
+        "tractor_plate": "B111BB11",
+        "trailer_plate": None,
+        "operation_type_code": "inbound",
+        "registered_at": "08:00",
+        "departed_at": "09:30",
+    }
+    resp = client.post("/api/uss/transport/vehicles", json=payload)
+    assert resp.status_code == 200
+    vehicle = resp.json["vehicle"]
+    assert vehicle["is_complete"] is True
+    assert vehicle["trailer_plate"] in (None, "")
+
+
+def test_vehicle_no_show_and_audit(auth_client, client):
+    auth_client("transport@test.local", "test")
+    create = client.post("/api/uss/transport/vehicles", json={
+        "warehouse_id": 1,
+        "contract_id": 1,
+        "operation_date": "2026-08-06",
+        "tractor_plate": "C222CC22",
+        "operation_type_code": "inbound",
+    })
+    assert create.status_code == 200
+    vid = create.json["id"]
+
+    no_show = client.post(f"/api/uss/transport/vehicles/{vid}/no-show", json={})
+    assert no_show.status_code == 200
+    assert no_show.json["vehicle"]["arrival_status"] == "no_show"
+    assert no_show.json["vehicle"]["is_complete"] is True
+
+    audit = client.get(f"/api/uss/transport/vehicles/{vid}/audit")
+    assert audit.status_code == 200
+    actions = [item["action"] for item in audit.json["items"]]
+    assert "create" in actions
+    assert "no_show" in actions

@@ -1,0 +1,20 @@
+{% extends "uss/reports_shell.html" %}
+
+{% block title %}Свод договоров и ДС{% endblock %}
+
+{% block report_content %}
+  <h2>Свод договоров и ДС</h2>
+  <p class="muted">
+    Договоры и доп. соглашения по клиентам: статусы, сроки действия и приближающееся окончание.
+    При автопролонгации дата окончания отображается как ∞.
+  </p>
+
+  <p id="status" class="status">Загрузка…</p>
+  <div id="toolbar" class="contracts-report-toolbar"></div>
+  <div id="summary"></div>
+  <div id="table-wrap"></div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/uss_contracts_registry.js?v={{ pls_build }}"></script>
+{% endblock %}

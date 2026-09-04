@@ -2,7 +2,7 @@
 const UssApi = {
   ERROR_MESSAGES: {
     forbidden: 'Нет доступа к этому разделу',
-    unauthorized: 'Войдите через SSO или /api/auth/login',
+    unauthorized: 'Войдите в систему (email и пароль)',
     no_warehouses: 'Нет доступных складов для вашего пользователя',
     period_locked: 'Период закрыт для правок',
     contract_not_found: 'Договор не найден',
@@ -129,6 +129,10 @@ const UssApi = {
       el.value = value ?? '';
     }
     el.name = f.field;
+    if (options.disabled) {
+      el.disabled = true;
+      if (el.tagName === 'INPUT' && el.type !== 'checkbox') el.readOnly = true;
+    }
     return el;
   },
 
@@ -137,6 +141,7 @@ const UssApi = {
   },
 
   createWaybillsEditor(initialWaybills, opType, editable = true) {
+    let isEditable = editable;
     let operationType = opType || 'inbound';
     const raw = (initialWaybills && initialWaybills.length) ? initialWaybills : [];
     let waybillLines = raw
@@ -164,7 +169,7 @@ const UssApi = {
         wbInp.value = val || '';
         wbInp.addEventListener('input', () => { waybillLines[idx] = wbInp.value; });
         wbLine.appendChild(wbInp);
-        if (editable) {
+        if (isEditable) {
           const rm = document.createElement('button');
           rm.type = 'button';
           rm.className = 'btn-link btn-remove-wb';
@@ -179,7 +184,7 @@ const UssApi = {
         }
         waybillCol.appendChild(wbLine);
       });
-      if (editable) {
+      if (isEditable) {
         const add = document.createElement('button');
         add.type = 'button';
         add.className = 'btn-link btn-add-wb';
@@ -204,7 +209,7 @@ const UssApi = {
         mxInp.value = val || '';
         mxInp.addEventListener('input', () => { mxLines[idx] = mxInp.value; });
         mxLine.appendChild(mxInp);
-        if (editable) {
+        if (isEditable) {
           const rm = document.createElement('button');
           rm.type = 'button';
           rm.className = 'btn-link btn-remove-wb';
@@ -219,7 +224,7 @@ const UssApi = {
         }
         mxCol.appendChild(mxLine);
       });
-      if (editable) {
+      if (isEditable) {
         const add = document.createElement('button');
         add.type = 'button';
         add.className = 'btn-link btn-add-wb';
@@ -242,6 +247,10 @@ const UssApi = {
     return {
       waybillCol,
       mxCol,
+      setEditable(on) {
+        isEditable = on;
+        render();
+      },
       updateOpType(newOp) {
         operationType = newOp || 'inbound';
         renderMx();
@@ -402,6 +411,9 @@ const UssApi = {
     btn.type = 'submit';
     btn.textContent = options.saveLabel || 'Сохранить';
     form.appendChild(btn);
+    if (options.readOnly) {
+      form.querySelectorAll('input, button').forEach((el) => { el.disabled = true; });
+    }
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const entries = inputs.map((inp) => ({
@@ -499,7 +511,7 @@ const UssApi = {
     body.appendChild(wrap);
   },
 
-  _renderInventoryDailyFields(body, schema, areaEntries, extraEntries, onSave) {
+  _renderInventoryDailyFields(body, schema, areaEntries, extraEntries, onSave, options = {}) {
     const areas = schema?.inventory_areas || [];
     const extras = schema?.inventory_extra || [];
     const fields = [
@@ -532,6 +544,9 @@ const UssApi = {
     btn.type = 'submit';
     btn.textContent = 'Сохранить';
     form.appendChild(btn);
+    if (options.readOnly) {
+      form.querySelectorAll('input, button').forEach((el) => { el.disabled = true; });
+    }
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const area = { ...areaEntries };
@@ -553,6 +568,7 @@ const UssApi = {
       onPeriodSave,
       vehicleExtras = null,
       inventory = null,
+      readOnly = false,
     } = options;
     const periodInputs = schema.period_inputs || [];
     const vInputs = schema.vehicle_inputs || [];
@@ -582,6 +598,7 @@ const UssApi = {
       this.renderPeriodForm(body, schema, totals, onPeriodSave, {
         embedded: true,
         saveLabel: 'Сохранить',
+        readOnly,
       });
       sections.appendChild(section);
     }
@@ -604,6 +621,7 @@ const UssApi = {
         inventory.areaEntries,
         inventory.extraEntries,
         inventory.onSave,
+        { readOnly },
       );
       sections.appendChild(section);
     }
@@ -612,9 +630,54 @@ const UssApi = {
   },
 
   applyContractPeriodLock(block, lockInfo, monthLabel) {
-    if (!block || !lockInfo?.locked) return;
+    if (!block || !lockInfo?.locked) {
+      if (block) block.dataset.periodLocked = '0';
+      return false;
+    }
     this.renderPeriodLockBanner(block, lockInfo, monthLabel);
-    this.setShiftReadOnly(block, true);
+    block.dataset.periodLocked = '1';
+    return true;
+  },
+
+  setRowFieldsEditable(rowEl, editable) {
+    if (!rowEl) return;
+    rowEl.classList.toggle('vehicle-row-editing', editable);
+    rowEl.querySelectorAll('input, select, textarea').forEach((el) => {
+      el.disabled = !editable;
+      if (el.tagName === 'INPUT' && el.type !== 'checkbox') el.readOnly = !editable;
+    });
+    rowEl.querySelectorAll('.btn-link').forEach((el) => {
+      el.disabled = !editable;
+    });
+  },
+
+  async showVehicleAuditDialog(vehicleId) {
+    const data = await this.json(`/api/uss/transport/vehicles/${vehicleId}/audit`);
+    const dlg = document.createElement('dialog');
+    dlg.className = 'audit-dialog';
+    const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    let rows = '';
+    (data.items || []).forEach((item) => {
+      const when = item.created_at ? item.created_at.replace('T', ' ').slice(0, 19) : '';
+      const who = esc(item.user_name || '—');
+      const action = esc(item.action_label || item.action);
+      let changes = '';
+      if (item.changes && Object.keys(item.changes).length) {
+        changes = '<ul class="audit-changes">' + Object.entries(item.changes).map(([k, v]) =>
+          `<li><code>${esc(k)}</code>: ${esc(v.old)} → ${esc(v.new)}</li>`,
+        ).join('') + '</ul>';
+      }
+      rows += `<li class="audit-entry"><div class="audit-entry-head"><strong>${action}</strong> · ${who} · <span class="muted">${when}</span></div>${changes}</li>`;
+    });
+    dlg.innerHTML = `
+      <form method="dialog" class="audit-dialog-form">
+        <h3>История изменений</h3>
+        ${rows ? `<ol class="audit-list">${rows}</ol>` : '<p class="muted">Записей пока нет.</p>'}
+        <div class="access-form-actions"><button type="submit" class="ref-btn ref-btn--primary">Закрыть</button></div>
+      </form>`;
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    dlg.addEventListener('close', () => dlg.remove());
   },
 
   renderContractDateHint(parent, hint) {

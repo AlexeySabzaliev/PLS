@@ -1,4 +1,4 @@
-"""Сессия портала security.bsh-ru.ru: cookie jar + браузер Yandex/Edge (Windows)."""
+"""Сессия портала security.bsh-ru.ru — серверный SSO (prod) и dev-обходы."""
 from __future__ import annotations
 
 import logging
@@ -12,6 +12,13 @@ from pathlib import Path
 
 import requests
 
+from app.modules.uss.services.security_config import (
+    resolve_security_auth_mode,
+    security_auth_mode_label,
+    security_auto_browser_cookies,
+    security_use_negotiate,
+)
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -22,9 +29,7 @@ BROWSER_PROFILES = (
     ("edge", Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft/Edge/User Data/Default"),
 )
 
-
-def _auto_browser_enabled() -> bool:
-    return os.getenv("SECURITY_AUTO_BROWSER_COOKIES", "1").lower() in ("1", "true", "yes")
+SECURITY_BASE_URL = os.getenv("SECURITY_BASE_URL", "https://security.bsh-ru.ru").rstrip("/")
 
 
 def _stop_browser_on_lock() -> bool:
@@ -32,11 +37,7 @@ def _stop_browser_on_lock() -> bool:
 
 
 def _negotiate_auth():
-    if os.getenv("SECURITY_USE_NEGOTIATE", "true" if os.name == "nt" else "false").lower() not in (
-        "1",
-        "true",
-        "yes",
-    ):
+    if not security_use_negotiate():
         return None
     try:
         from requests_negotiate_sspi import HttpNegotiateAuth
@@ -105,7 +106,6 @@ def session_authenticated(session: requests.Session, base_url: str) -> bool:
 
 
 def _chromium_local_state(profile: Path) -> Path:
-    """Local State лежит в User Data, не в Default."""
     return profile.parent / "Local State"
 
 
@@ -197,25 +197,8 @@ def _cookies_from_profile(label: str, profile: Path, browser_cookie3) -> request
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def _bootstrap_negotiate(session: requests.Session, base_url: str) -> bool:
-    auth = _negotiate_auth()
-    if not auth:
-        return False
-    probe = _new_session()
-    probe.auth = auth
-    try:
-        probe.get(f"{base_url}/", timeout=20)
-        sso = probe.get(f"{base_url}/api/auth/sso", timeout=25)
-        if sso.ok:
-            session.cookies.update(probe.cookies)
-            return session_authenticated(session, base_url)
-    except requests.RequestException as exc:
-        logger.warning("security negotiate bootstrap failed: %s", exc)
-    return False
-
-
 def _session_from_browser() -> requests.Session | None:
-    if not _auto_browser_enabled():
+    if not security_auto_browser_cookies():
         return None
     try:
         import browser_cookie3
@@ -232,54 +215,115 @@ def _session_from_browser() -> requests.Session | None:
     return None
 
 
-SECURITY_BASE_URL = os.getenv("SECURITY_BASE_URL", "https://security.bsh-ru.ru").rstrip("/")
+def _session_with_negotiate(base_url: str) -> requests.Session | None:
+    auth = _negotiate_auth()
+    if not auth:
+        return None
+    session = _new_session()
+    session.auth = auth
+    try:
+        session.get(f"{base_url}/", timeout=20)
+        sso = session.get(f"{base_url}/api/auth/sso", timeout=25)
+        if sso.ok and session_authenticated(session, base_url):
+            return session
+    except requests.RequestException as exc:
+        logger.warning("security negotiate session failed: %s", exc)
+    return None
+
+
+def security_refresh_hint(mode: str | None = None) -> str:
+    mode = mode or resolve_security_auth_mode()
+    if mode == "negotiate":
+        return (
+            "Нет SSO-сессии портала охраны. Проверьте учётку службы Windows (SPN, "
+            "«Выполнять вход как») и SECURITY_USE_NEGOTIATE=true."
+        )
+    if mode == "cookie":
+        return (
+            "Нет сессии портала охраны. Задайте SECURITY_API_COOKIE или "
+            "SECURITY_COOKIE_FILE, либо: flask pls security-refresh-session"
+        )
+    if mode == "browser":
+        return (
+            "Нет SSO-сессии портала охраны (dev). Войдите на https://security.bsh-ru.ru "
+            "в Yandex/Edge под доменной учёткой, затем: flask pls security-refresh-session"
+        )
+    if mode == "local_db":
+        return "Режим локального кэша: импортируйте заявки (flask pls security-import-sql)."
+    return "Портал охраны недоступен."
 
 
 def refresh_security_session(base_url: str, *, cookie_header: str | None = None) -> dict:
-    """Обновить SSO-сессию: jar → env → браузер → Negotiate."""
+    """Обновить сессию к порталу по настроенному режиму (серверный SSO в prod)."""
+    mode = resolve_security_auth_mode()
     methods: list[str] = []
 
-    session = _new_session()
-    if _load_jar(session):
-        methods.append("jar")
-        if session_authenticated(session, base_url):
+    if mode == "negotiate":
+        session = _session_with_negotiate(base_url)
+        if session:
             save_session_jar(session)
-            return {"ok": True, "method": "jar", "methods": methods}
+            return {"ok": True, "method": "negotiate", "methods": ["negotiate"], "auth_mode": mode}
+        return {
+            "ok": False,
+            "method": None,
+            "methods": ["negotiate"],
+            "auth_mode": mode,
+            "hint": security_refresh_hint("negotiate"),
+        }
 
-    if cookie_header:
-        session = _new_session(cookie_header)
-        methods.append("env_cookie")
-        if session_authenticated(session, base_url):
-            save_session_jar(session)
-            return {"ok": True, "method": "env_cookie", "methods": methods}
+    if mode == "cookie":
+        session = _new_session()
+        if _load_jar(session):
+            methods.append("jar")
+            if session_authenticated(session, base_url):
+                save_session_jar(session)
+                return {"ok": True, "method": "jar", "methods": methods, "auth_mode": mode}
+        if cookie_header:
+            session = _new_session(cookie_header)
+            methods.append("env_cookie")
+            if session_authenticated(session, base_url):
+                save_session_jar(session)
+                return {"ok": True, "method": "env_cookie", "methods": methods, "auth_mode": mode}
+        return {
+            "ok": False,
+            "method": None,
+            "methods": methods,
+            "auth_mode": mode,
+            "hint": security_refresh_hint("cookie"),
+        }
 
-    browser_session = _session_from_browser()
-    if browser_session:
-        methods.append("browser")
-        save_session_jar(browser_session)
-        return {"ok": True, "method": "browser", "methods": methods}
+    if mode == "browser":
+        browser_session = _session_from_browser()
+        if browser_session:
+            save_session_jar(browser_session)
+            return {"ok": True, "method": "browser", "methods": ["browser"], "auth_mode": mode}
+        return {
+            "ok": False,
+            "method": None,
+            "methods": ["browser"],
+            "auth_mode": mode,
+            "hint": security_refresh_hint("browser"),
+        }
 
-    session = _new_session()
-    if _bootstrap_negotiate(session, base_url):
-        methods.append("negotiate")
-        save_session_jar(session)
-        return {"ok": True, "method": "negotiate", "methods": methods}
-
-    return {
-        "ok": False,
-        "method": None,
-        "methods": methods,
-        "hint": (
-            "Нет SSO-сессии портала охраны. Войдите на https://security.bsh-ru.ru в Yandex "
-            "(доменная учётка), затем: flask pls security-refresh-session"
-        ),
-    }
+    # local_db / stub — live-сессия не нужна
+    return {"ok": False, "method": None, "methods": [], "auth_mode": mode, "hint": security_refresh_hint(mode)}
 
 
 def get_authenticated_session(base_url: str, *, cookie_header: str | None = None) -> requests.Session | None:
+    mode = resolve_security_auth_mode()
+    if mode == "negotiate":
+        session = _session_with_negotiate(base_url)
+        if session:
+            save_session_jar(session)
+        return session
+
     info = refresh_security_session(base_url, cookie_header=cookie_header)
     if not info.get("ok"):
         return None
     session = _new_session()
-    _load_jar(session)
-    return session if session.cookies else None
+    if _load_jar(session):
+        return session
+    if mode == "cookie" and cookie_header:
+        session = _new_session(cookie_header)
+        return session if session_authenticated(session, base_url) else None
+    return None

@@ -66,11 +66,37 @@ def uss_reports_fot():
     )
 
 
+@bp.get("/uss/reports/contracts")
+def uss_reports_contracts():
+    return render_template(
+        "uss/contracts_registry.html",
+        user=get_current_user(),
+        active="reports",
+        report_section="contracts",
+    )
+
+
+@bp.get("/profile")
+def profile():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for("web.index"))
+    return render_template(
+        "profile.html",
+        user=user,
+        app_short=Config.APP_SHORT,
+    )
+
+
 @bp.get("/admin/reference")
 def admin_reference():
-    return render_template("admin/reference.html", user=get_current_user())
+    return render_template(
+        "admin/reference.html",
+        user=get_current_user(),
+        active="reference",
+    )
 
 
 @bp.get("/admin/sso")
 def admin_sso():
-    return render_template("admin/sso.html", user=get_current_user())
+    return redirect(url_for("web.admin_reference", catalog="user_access"), code=302)

@@ -60,26 +60,31 @@
         const schema = data.schemas?.[blockKey] || data.schemas?.[cid] || {};
         UssApi.renderContractHeader(block, c);
         UssApi.renderContractDateHint(block, c.date_hint);
-        UssApi.applyContractPeriodLock(block, data.period_locks?.[String(c.id)], monthLabel);
+        const periodLocked = UssApi.applyContractPeriodLock(block, data.period_locks?.[String(c.id)], monthLabel);
         const reportHost = document.createElement('div');
         block.appendChild(reportHost);
         UssApi.renderDailyReportForm(reportHost, {
           schema,
+          readOnly: periodLocked,
           inventory: {
             areaEntries: areaAll,
             extraEntries: extraAll,
             onSave: async (area, extra) => {
-              await UssApi.json('/api/uss/inventory/shift', {
-                method: 'POST',
-                body: JSON.stringify({
-                  warehouse_id: data.warehouse_id,
-                  report_date: data.report_date,
-                  area_entries: area,
-                  extra_entries: extra,
-                }),
-              });
-              setStatus('Сохранено.');
-              load();
+              try {
+                await UssApi.json('/api/uss/inventory/shift', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    warehouse_id: data.warehouse_id,
+                    report_date: data.report_date,
+                    area_entries: area,
+                    extra_entries: extra,
+                  }),
+                });
+                setStatus('Сохранено.');
+                load();
+              } catch (e) {
+                setStatus(e.message, true);
+              }
             },
           },
         });
@@ -88,7 +93,7 @@
 
       setStatus(`Склад ${warehouseId}, ${data.report_date}`);
     } catch (e) {
-      setStatus(e.message === 'unauthorized' ? 'Войдите через SSO или /api/auth/login' : e.message, true);
+      setStatus(e.message === 'unauthorized' ? 'Войдите в систему' : e.message, true);
     }
   }
 

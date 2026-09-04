@@ -44,21 +44,11 @@ python run.py
 | `flask pls seed-demo` | демо-данные |
 | `flask pls db-check` | проверка подключения к БД |
 
-## SSO (Windows)
+## Вход
 
-В `.env`:
+Email и пароль. Восстановление — кнопка «Забыли пароль?» на главной; админ обрабатывает заявку в справочнике «Пользователи и доступ».
 
-```env
-SSO_ENABLED=true
-SSO_MODE=headers          # или windows | oidc
-SSO_USER_HEADER=Remote-User
-SSO_EMAIL_DOMAIN=bsh-ru.ru
-SSO_DEV_IDENTITY=BSH\your.login   # только dev, не production
-```
-
-Пользователь должен существовать в БД с тем же email. Роли — в `user_roles`.
-
-Локальный вход (dev): `SSO_ALLOW_PASSWORD_LOGIN=true`, `POST /api/auth/login`.
+Локальный dev: `admin@bsh-ru.ru` / `admin` (см. `.env` → `PLS_ADMIN_*`).
 
 ## Структура
 

@@ -184,7 +184,7 @@ def register_cli(app: Flask) -> None:
     @pls_group.command("security-refresh-session")
     @with_appcontext
     def cmd_security_refresh_session():
-        """Обновить SSO-cookie портала охраны (Yandex/Edge → instance/security_session.txt)."""
+        """Обновить сессию к порталу охраны (prod: Negotiate учётки службы)."""
         import os
 
         from app.modules.uss.services.security_session import refresh_security_session

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="pls-build" content="{{ pls_build }}">
+  <title>Профиль — {{ app_short }}</title>
+  <link rel="stylesheet" href="/static/css/main.css?v={{ pls_build }}">
+</head>
+<body>
+  <header class="pls-header">
+    <a href="/" class="pls-logo">{{ app_short }}</a>
+    {% include 'includes/pls_user_bar.html' %}
+  </header>
+
+  <main class="pls-main">
+    <h1 class="page-title">Профиль</h1>
+    <p class="muted"><a href="/">← На главную</a></p>
+
+    <section class="profile-panel" id="profile-panel">
+      <form id="profile-form" class="profile-form">
+        <h2>Учётная запись</h2>
+        <label class="access-field">
+          <span>Email</span>
+          <input type="email" id="profile-email" readonly>
+        </label>
+        <label class="access-field">
+          <span>ФИО</span>
+          <input type="text" name="full_name" id="profile-full-name">
+        </label>
+        <p class="muted" id="profile-roles"></p>
+        <div class="access-form-actions">
+          <button type="submit" class="ref-btn ref-btn--primary">Сохранить</button>
+        </div>
+      </form>
+
+      <form id="password-form" class="profile-form">
+        <h2 id="password-form-title">Пароль</h2>
+        <p class="muted" id="password-policy-hint"></p>
+        <div id="current-password-wrap">
+          <label class="access-field">
+            <span>Текущий пароль</span>
+            <input type="password" name="current_password" autocomplete="current-password">
+          </label>
+        </div>
+        <label class="access-field">
+          <span>Новый пароль</span>
+          <input type="password" name="new_password" required autocomplete="new-password">
+        </label>
+        <label class="access-field">
+          <span>Подтверждение</span>
+          <input type="password" name="confirm_password" required autocomplete="new-password">
+        </label>
+        <div class="access-form-actions">
+          <button type="submit" class="ref-btn ref-btn--primary">Сменить пароль</button>
+        </div>
+      </form>
+
+      <p id="profile-status" class="status"></p>
+    </section>
+  </main>
+
+  <script src="/static/js/pls_header.js?v={{ pls_build }}"></script>
+  <script src="/static/js/profile.js?v={{ pls_build }}"></script>
+</body>
+</html>

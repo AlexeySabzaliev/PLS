@@ -167,23 +167,64 @@ body {
 }
 
 .uss-intro-card-title {
-  margin: 0 0 0.5rem;
-  font-size: 1rem;
+  margin: 0 0 0.35rem;
+  font-size: 1.02rem;
+  color: #1e3a5f;
 }
 
-.uss-intro-links {
-  margin: 0.75rem 0 0;
-  padding-left: 1.15rem;
-  line-height: 1.5;
+.uss-intro-card-lead {
+  margin: 0 0 0.65rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #64748b;
 }
 
-.uss-intro-links a {
+.uss-intro-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.uss-intro-list li {
+  padding: 0.55rem 0;
+  border-top: 1px solid #eef2f6;
+}
+
+.uss-intro-list li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.uss-intro-item-name {
+  display: block;
   font-weight: 600;
+  font-size: 0.9rem;
+  color: #334155;
+  line-height: 1.35;
+}
+
+.uss-intro-item-desc {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: #64748b;
 }
 
 .uss-intro-foot {
-  margin: 0;
-  font-size: 0.9rem;
+  margin: 1.25rem 0 0;
+  padding-top: 0.85rem;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.88rem;
+}
+
+.uss-intro-roles {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  background: #e8eef5;
+  color: #1e3a5f;
+  font-size: 0.8rem;
 }
 
 .wh-staff-history {
@@ -521,13 +562,35 @@ body {
   max-width: 100%;
 }
 
-/* Транспортная смена — компактная таблица на всю ширину экрана */
-.uss-transport .transport-table-wrap {
+/* Ежесменные отчёты УСС — единый лейаут */
+.uss-shift-page .page-title {
+  margin-bottom: 0.35rem;
+}
+
+.uss-shift-lead {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.uss-shift-field-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+
+.uss-shift-toolbar {
+  margin-bottom: 0.75rem;
+}
+
+.uss-shift-content {
+  font-size: 0.875rem;
+}
+
+.uss-shift-page .transport-table-wrap {
   width: 100%;
   margin-bottom: 0.5rem;
 }
 
-.uss-transport .transport-wide-table {
+.uss-shift-page .transport-wide-table {
   width: 100%;
   min-width: 0;
   table-layout: fixed;
@@ -535,16 +598,16 @@ body {
   border-collapse: collapse;
 }
 
-.uss-transport .transport-wide-table th,
-.uss-transport .transport-wide-table td {
+.uss-shift-page .transport-wide-table th,
+.uss-shift-page .transport-wide-table td {
   padding: 0.2rem 0.25rem;
   vertical-align: top;
   overflow: hidden;
   line-height: 1.2;
 }
 
-.uss-transport .transport-wide-table input,
-.uss-transport .transport-wide-table select {
+.uss-shift-page .transport-wide-table input,
+.uss-shift-page .transport-wide-table select {
   min-width: 0;
   width: 100%;
   font-size: 0.78rem;
@@ -552,21 +615,22 @@ body {
   box-sizing: border-box;
 }
 
-.uss-transport .transport-wide-table .col-plate { width: 5.5%; }
-.uss-transport .transport-wide-table .col-op { width: 6.5%; }
-.uss-transport .transport-wide-table .col-waybill { width: 7%; }
-.uss-transport .transport-wide-table .col-mx { width: 6%; }
-.uss-transport .transport-wide-table .col-type { width: 9%; }
-.uss-transport .transport-wide-table .col-seal { width: 5%; }
-.uss-transport .transport-wide-table .col-torg2 { width: 5%; }
-.uss-transport .transport-wide-table .col-vol { width: 4%; }
-.uss-transport .transport-wide-table .col-handling { width: 7%; }
-.uss-transport .transport-wide-table .col-time { width: 5%; }
-.uss-transport .transport-wide-table .col-qty { width: 4.5%; }
-.uss-transport .transport-wide-table .col-tariff { width: 5.5%; }
-.uss-transport .transport-wide-table .col-actions { width: 4.5%; }
+.uss-shift-page .transport-wide-table .col-plate { width: 5.5%; }
+.uss-shift-page .transport-wide-table .col-op { width: 6.5%; }
+.uss-shift-page .transport-wide-table .col-waybill { width: 7%; }
+.uss-shift-page .transport-wide-table .col-mx { width: 6%; }
+.uss-shift-page .transport-wide-table .col-type { width: 9%; }
+.uss-shift-page .transport-wide-table .col-seal { width: 5%; }
+.uss-shift-page .transport-wide-table .col-torg2 { width: 5%; }
+.uss-shift-page .transport-wide-table .col-vol { width: 4%; }
+.uss-shift-page .transport-wide-table .col-handling { width: 7%; }
+.uss-shift-page .transport-wide-table .col-time { width: 5%; }
+.uss-shift-page .transport-wide-table .col-qty { width: 4.5%; }
+.uss-shift-page .transport-wide-table .col-tariff { width: 5.5%; }
+.uss-shift-page .transport-wide-table .col-processed { width: 7%; }
+.uss-shift-page .transport-wide-table .col-actions { width: 8%; }
 
-.uss-transport .transport-wide-table th {
+.uss-shift-page .transport-wide-table th {
   font-weight: 600;
   font-size: 0.74rem;
   line-height: 1.25;
@@ -576,11 +640,98 @@ body {
   vertical-align: bottom;
 }
 
-.uss-transport .transport-wide-table .col-actions button {
+.uss-shift-page .transport-wide-table .col-actions button,
+.uss-shift-page .vehicle-row-actions .ref-btn {
   padding: 0.25rem 0.4rem;
   font-size: 0.72rem;
   white-space: normal;
   line-height: 1.15;
+  margin: 0.1rem 0;
+  display: block;
+  width: 100%;
+  max-width: 6.5rem;
+}
+
+.vehicle-processed-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  background: #e6f4ea;
+  color: #1e4620;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vehicle-status-badge--no-show {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  background: #fce8e6;
+  color: #8b1a10;
+}
+
+.vehicle-draft-badge {
+  font-size: 0.72rem;
+}
+
+.vehicle-row-complete td input,
+.vehicle-row-complete td select {
+  background: #f8faf8;
+}
+
+.vehicle-row-no-show {
+  opacity: 0.85;
+}
+
+.vehicle-row-editing {
+  background: #fffef5;
+}
+
+.audit-dialog {
+  border: none;
+  border-radius: 8px;
+  padding: 0;
+  max-width: 36rem;
+  width: 92vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.audit-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.audit-dialog-form {
+  padding: 1.25rem 1.5rem;
+  margin: 0;
+}
+
+.audit-dialog-form h3 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+}
+
+.audit-list {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.audit-entry {
+  margin-bottom: 0.75rem;
+}
+
+.audit-entry-head {
+  font-size: 0.875rem;
+}
+
+.audit-changes {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
 }
 
 .waybills-block {
@@ -713,26 +864,151 @@ nav a { margin-right: 1rem; }
   white-space: nowrap;
 }
 
+.row-actions .ref-btn {
+  margin: 0 0.25rem 0.25rem 0;
+}
+
+.ref-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.38rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  font-family: inherit;
+  line-height: 1.2;
+  border-radius: 6px;
+  border: 1px solid #c5d0dc;
+  background: #fff;
+  color: #1e3a5f;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.ref-btn:hover {
+  background: #eef4fb;
+  border-color: #1e3a5f;
+}
+
+.ref-btn--primary {
+  background: #1e3a5f;
+  border-color: #1e3a5f;
+  color: #fff;
+}
+
+.ref-btn--primary:hover {
+  background: #2a5080;
+  border-color: #2a5080;
+  color: #fff;
+}
+
+.ref-btn--ghost {
+  background: #f4f7fb;
+}
+
+.ref-btn--danger {
+  background: #fff;
+  color: #b42318;
+  border-color: #f0c4c0;
+}
+
+.ref-btn--danger:hover {
+  background: #fef2f2;
+  border-color: #b42318;
+}
+
+.ref-form-toolbar {
+  margin-top: 1.25rem;
+}
+
+.ref-add-panel {
+  margin-top: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.ref-add-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.ref-add-panel-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #1e3a5f;
+}
+
+.ref-add-form .field-row {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  gap: 0.45rem 1rem;
+  align-items: center;
+  margin-bottom: 0.65rem;
+}
+
+.ref-add-form .field-row > span {
+  color: #475569;
+  font-size: 0.88rem;
+}
+
+.ref-add-form-actions {
+  margin-top: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.ref-input {
+  width: 100%;
+  max-width: 22rem;
+  box-sizing: border-box;
+  padding: 0.42rem 0.55rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: #fff;
+  color: #1a1a1a;
+}
+
+.ref-input:focus {
+  outline: none;
+  border-color: #1e3a5f;
+  box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.12);
+}
+
+.ref-input--narrow {
+  max-width: 6rem;
+}
+
+.ref-table .ref-input {
+  max-width: none;
+}
+
 .row-actions button {
   margin-right: 0.35rem;
   font-size: 0.8rem;
   padding: 0.25rem 0.5rem;
 }
 
-.btn-del {
-  background: #fff !important;
-  color: #b00020 !important;
-  border-color: #b00020 !important;
+.ref-btn.btn-del,
+.ref-btn.ref-btn--danger {
+  background: #fff;
+  color: #b42318;
+  border-color: #f0c4c0;
 }
 
 .add-form {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #e8e8e8;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 .add-form .field-row {
-  grid-template-columns: 180px 1fr;
+  grid-template-columns: 11rem 1fr;
 }
 
 .ref-table .display-cell {
@@ -1026,7 +1302,51 @@ nav a { margin-right: 1rem; }
   padding: 1rem 1.25rem;
   margin-bottom: 1.5rem;
   box-shadow: 0 1px 3px rgba(0,0,0,.08);
-  max-width: 360px;
+  max-width: 420px;
+}
+
+.login-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.login-tab {
+  flex: 1;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid #c5d0de;
+  background: #f4f7fb;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.login-tab--active {
+  background: #1e3a5f;
+  color: #fff;
+  border-color: #1e3a5f;
+}
+
+.login-mode-panel {
+  margin-bottom: 0.75rem;
+}
+
+.sso-access-request {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e8edf3;
+}
+
+.sso-access-request .access-field {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.sso-access-request .access-field input {
+  display: block;
+  width: 100%;
+  margin-top: 0.2rem;
+  padding: 0.35rem 0.5rem;
+  box-sizing: border-box;
 }
 
 .login-form label {
@@ -1050,6 +1370,64 @@ nav a { margin-right: 1rem; }
   background: #1e3a5f;
   color: #fff;
   border-radius: 4px;
+}
+
+.profile-panel {
+  max-width: 520px;
+}
+
+.profile-form {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+
+.profile-form h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.profile-form .access-field {
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+.profile-form .access-field input {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.5rem;
+  box-sizing: border-box;
+}
+
+.pls-user-profile {
+  color: #1e3a5f;
+  text-decoration: none;
+  margin-right: 0.75rem;
+}
+
+.pls-user-profile:hover {
+  text-decoration: underline;
+}
+
+.status.ok {
+  color: #1a6b3a;
+}
+
+.link-btn--inline {
+  margin-left: 0;
+  margin-top: 0.5rem;
+  background: transparent;
+  color: #1e3a5f;
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.login-forgot {
+  margin: 0.5rem 0 0;
 }
 
 .link-btn {
@@ -1320,6 +1698,112 @@ nav a { margin-right: 1rem; }
 .fot-weekly-table { margin-bottom: 1.25rem; }
 .fot-frozen-note { margin: 0.5rem 0 0; }
 .fot-weekend-row td { color: #8b949e; }
+
+/* Свод договоров и ДС */
+.contracts-report-toolbar { margin-bottom: 1rem; }
+.cr-filter-label { margin-right: 1rem; }
+.cr-days-input { width: 4.5rem; }
+.cr-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1.25rem;
+}
+.cr-card {
+  background: #fff;
+  border: 1px solid #d8dee4;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+.cr-card--warn { border-color: #f5c26b; background: #fffaf0; }
+.cr-card-label { font-size: 0.8rem; color: #57606a; }
+.cr-card-value { font-size: 1.35rem; font-weight: 600; margin-top: 0.15rem; }
+.cr-table .cr-client-cell { font-weight: 600; vertical-align: top; }
+.cr-status {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  background: #f0f3f6;
+}
+.cr-status--ok { background: #e6f4ea; color: #0d7a3f; }
+.cr-status--warn { background: #fff4e5; color: #9a6700; }
+.cr-status--muted { background: #f0f3f6; color: #57606a; }
+.cr-infinity { font-size: 1.25rem; font-weight: 600; color: #0969da; }
+.cr-expiring { color: #9a6700; font-size: 0.82rem; margin-left: 0.35rem; }
+.cr-expired { color: #b42318; font-size: 0.82rem; margin-left: 0.35rem; }
+.cr-row-expiring td { background: #fffaf0; }
+.ref-checkbox-label { display: flex; align-items: center; gap: 0.4rem; }
+
+/* Пользователи и доступ (админ) */
+.access-panel {
+  background: #fff;
+  border: 1px solid #d8dee4;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.access-panel h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.access-badge {
+  display: inline-block;
+  min-width: 1.4rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: #0969da;
+  color: #fff;
+  font-size: 0.8rem;
+  text-align: center;
+}
+.access-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.access-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.access-field input { max-width: 24rem; }
+.access-role-groups { margin: 0.5rem 0; }
+.access-role-group {
+  border: 1px solid #e8ecf0;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+}
+.access-role-group legend { font-size: 0.85rem; font-weight: 600; padding: 0 0.25rem; }
+.access-role-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+.access-checkbox { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.92rem; }
+.access-form-actions { margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.access-request-card {
+  border: 1px solid #e8ecf0;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  background: #fafbfc;
+}
+.access-request-head { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin-bottom: 0.5rem; align-items: baseline; }
+.access-users-table td { vertical-align: top; }
+.access-tag {
+  font-size: 0.72rem;
+  background: #ddf4ff;
+  color: #0969da;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+}
+.access-dialog {
+  border: none;
+  border-radius: 10px;
+  padding: 0;
+  max-width: 36rem;
+  width: calc(100% - 2rem);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+}
+.access-dialog::backdrop { background: rgba(0,0,0,0.35); }
+.access-dialog form { padding: 1.25rem; }
+.access-filter { margin-bottom: 0.75rem; }
 .report-links {
   list-style: none;
   padding: 0;
