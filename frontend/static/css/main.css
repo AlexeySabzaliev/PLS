@@ -2088,3 +2088,94 @@ nav a { margin-right: 1rem; }
   border: 1px solid #f0d58a;
   font-size: 0.88rem;
 }
+/* ===== УЗнТ: заявки на перевозку ===== */
+.uznt-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #fff;
+  margin-bottom: 0.75rem;
+}
+.uznt-filters input[type="date"] { min-width: 8.5rem; }
+.uznt-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 0.9rem;
+}
+.uznt-table th,
+.uznt-table td {
+  border: 1px solid #d0d7de;
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+.uznt-table th {
+  background: #f6f8fa;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.uznt-table td.num { text-align: right; white-space: nowrap; }
+.uznt-actions { white-space: nowrap; }
+.uzn-badge {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  background: #eaeef2;
+  color: #1f2328;
+}
+.uzn-badge--new { background: #ddf4ff; color: #0969da; }
+.uzn-badge--accepted { background: #d8fbdd; color: #1a7f37; }
+.uzn-badge--transit { background: #fff8c5; color: #7d4e00; }
+.uzn-badge--done { background: #d8fbdd; color: #116329; }
+.uzn-badge--cancel { background: #ffebe9; color: #cf222e; }
+
+.uznt-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem;
+  z-index: 90;
+  overflow-y: auto;
+}
+.uznt-dialog {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 40rem;
+  padding: 1.25rem 1.5rem;
+}
+.uznt-dialog-title { margin: 0 0 0.75rem; }
+.uznt-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1rem;
+}
+.uznt-form .uznt-field:nth-last-child(-n+2) { grid-column: span 2; }
+.uznt-field { display: flex; flex-direction: column; gap: 0.2rem; }
+.uznt-field-label { font-size: 0.82rem; color: #57606a; }
+.uznt-field textarea { min-height: 60px; }
+.uznt-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.uznt-dialog-error {
+  margin-top: 0.75rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  background: #ffebe9;
+  border: 1px solid #f0b3b0;
+  color: #82071e;
+  font-size: 0.88rem;
+}

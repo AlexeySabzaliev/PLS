@@ -80,6 +80,7 @@ _PATH_SECTIONS: list[tuple[str, str]] = [
     ("/api/uss/warehouse", "uss_ops_warehouse"),
     ("/api/uss/inventory", "uss_ops_inventory"),
     ("/api/process", "uss_process_lines"),
+    ("/api/uznt", "requests_transport"),
     ("/uznt/requests", "requests_transport"),
     ("/uznt/tenders", "tenders"),
     ("/uznt/analytics", "request_analytics"),

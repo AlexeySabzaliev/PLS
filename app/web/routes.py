@@ -86,6 +86,11 @@ def uss_reports_arrival_gap():
     )
 
 
+@bp.get("/uznt/requests")
+def uznt_requests():
+    return render_template("uznt/requests.html", user=get_current_user(), active="requests")
+
+
 @bp.get("/profile")
 def profile():
     user = get_current_user()

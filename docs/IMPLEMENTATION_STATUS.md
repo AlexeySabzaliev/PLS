@@ -3,7 +3,7 @@
 Портал УСС + УЗнТ на `D:\PLS`. Эталон логики: `D:\Billings`.
 
 **Последнее обновление:** 2026-09-07  
-**Тесты:** `pytest -q` — **231 passed**
+**Тесты:** `pytest -q` — **238 passed**
 
 ---
 
@@ -56,6 +56,29 @@
 
 - `excel_export.py` — `GET /api/billing/export?contract_id=&year=&month=`, кнопка «Экспорт Excel» в `/uss/billing`
 - `amendments_overview.py` — `GET /api/reference/amendments-overview`, блок обзора на вкладке «Доп. соглашения»
+
+## УЗнТ: заявки на перевозку (2026-09-07)
+
+Полный CRUD раздела «заявки на перевозку» реализован по паттерну `uss/transport`.
+
+- **Модель** `TransportRequest` (`transport_requests`) в `app/modules/uznt/models.py`:
+  номер (автогенерация `UZNT-ГГГГММДД-NNNN`), дата, клиент, площадка, маршрут,
+  груз (объём/вес), количество/единица, тип ТС, число машин, цена, статус, приоритет,
+  примечания, аудит (created/updated_by, created/updated_at).
+- **Статусы**: `new / accepted / in_transit / delivered / cancelled`; **приоритеты**: `normal / high`.
+- **Сервис** `app/modules/uznt/services.py` — `list/get/create/update/delete`, валидация
+  (дата, клиент/площадка/тип ТС, уникальность номера, статус/приоритет), сериализация,
+  `request_meta` (списки справочников без доступа к разделу «Справочники»).
+- **API** `app/modules/uznt/api.py` — blueprint `/api/uznt`: `GET/POST /requests`,
+  `GET/PUT/DELETE /requests/<id>`, `GET /meta`. Права: `requests_transport` (просмотр+правка),
+  `requests_view_all` (только просмотр), админ — всё.
+- **Веб** `GET /uznt/requests` (модуль УЗнТ): шаблоны `frontend/templates/uznt/base.html`,
+  `uznt/requests.html`, JS `uznt_requests.js` + `uznt_common.js`, стили в `main.css`.
+  Заглушка раздела из `stub_routes.py` заменена реальной страницей.
+- **section_guard**: добавлен `/api/uznt` → `requests_transport` (техработы блокируют и API УЗнТ).
+- **Миграция** `migrations/versions/019_uznt_requests.py`.
+- **Тесты** `tests/test_uznt_requests.py` (7): CRUD-поток, валидация, уникальность номера,
+  права (403 для роли без секции), meta, страница, админ. Итого **238 passed** (231 + 7).
 
 ---
 

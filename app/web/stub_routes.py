@@ -72,23 +72,6 @@ def uznt_index(user):
     )
 
 
-@bp.get("/uznt/requests")
-@_login_required_page
-def uznt_requests(user):
-    if not (
-        user_has_request_section(user, "requests_transport")
-        or user_has_request_section(user, "requests_view_all")
-    ):
-        abort(403)
-    return _render_stub(
-        user,
-        module="uznt",
-        title="Заявки на перевозку",
-        section="requests_transport",
-        description="Список и обработка заявок GP/материалы — в разработке.",
-    )
-
-
 @bp.get("/uznt/tenders")
 @_login_required_page
 def uznt_tenders(user):

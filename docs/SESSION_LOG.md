@@ -92,3 +92,55 @@
 - Не трогать `app/core/` без явного указания (в этой сессии трогали только тест).
 - Новые REST-эндпоинты — в `app/modules/*/routes.py`, модели — там же `models.py`, тесты — `tests/test_*.py`.
 - Паттерн-образец — `app/modules/reference/`.
+
+---
+
+## 2026-09-07 — Сессия 3: УЗнТ — заявки на перевозку (CRUD по паттерну Transport)
+
+### Цель сессии
+Реализовать полный CRUD раздела УЗнТ «заявки на перевозку» (`/uznt/requests`,
+`/api/uznt/requests`) по паттерну `app/modules/uss/transport`, с тестами.
+
+### Контекст
+Старт с чистого дерева: заглушки (`e75aa80`, `2acdde0`, `f35576b`) запушены.
+Раздел прав уже существовал: `REQUEST_SECTIONS` → `requests_transport`/`requests_view_all`
+(`app/core/permissions.py`), входные секции УЗнТ в `section_guard.py`. `/uznt/requests`
+было заглушкой в `app/web/stub_routes.py`.
+
+### Что сделано
+1. **Модель + БД** — `app/modules/uznt/models.py` (`TransportRequest`, таблица
+   `transport_requests`), статусы `new/accepted/in_transit/delivered/cancelled`,
+   приоритеты `normal/high`; миграция `migrations/versions/019_uznt_requests.py`.
+2. **Сервис** `app/modules/uznt/services.py` — `list/get/create/update/delete`,
+   автогенерация номера `UZNT-ГГГГММДД-NNNN`, валидация, частичное обновление,
+   `request_meta` (клиенты/склады/типы ТС/единицы без раздела «Справочники»).
+3. **API** `app/modules/uznt/api.py` — blueprint `/api/uznt`: `GET/POST /requests`,
+   `GET/PUT/DELETE /requests/<id>`, `GET /meta`. Создание → 201, ошибки валидации → 422,
+   not_found → 404, forbidden → 403. Права: просмотр `requests_view_all`,
+   правки `requests_transport`, админ — всё. В `app/__init__.py` импорт моделей +
+   регистрация `uznt_api_bp`.
+4. **Веб** — `GET /uznt/requests` в `app/web/routes.py` (реальная страница), заглушка
+   удалена из `stub_routes.py`; шаблоны `uznt/base.html`, `uznt/requests.html`;
+   JS `uznt_common.js`, `uznt_requests.js` (таблица, фильтры, модалка CRUD); стили в
+   `main.css`; карточка УЗнТ на `index.html` активна для пользователей с доступом.
+5. **section_guard** — `/api/uznt` → `requests_transport` (техработы блокируют API УЗнТ).
+6. **Тесты** — `tests/test_uznt_requests.py` (7 новых): CRUD-поток, валидация,
+   уникальность номера, права 403, meta, страница, админ. Обновлены устаревшие
+   stub-тесты в `test_dev_stubs.py` (страница стала реальной: 200 вместо 302 + API 401).
+7. **Тесты**: **238 passed** (231 + 7 новых), прогон по группам — все зелёные.
+
+### Файлы
+- (новые): `app/modules/uznt/__init__.py`, `app/modules/uznt/models.py`,
+  `app/modules/uznt/services.py`, `app/modules/uznt/api.py`,
+  `frontend/templates/uznt/base.html`, `frontend/templates/uznt/requests.html`,
+  `frontend/static/js/uznt_common.js`, `frontend/static/js/uznt_requests.js`,
+  `migrations/versions/019_uznt_requests.py`, `tests/test_uznt_requests.py`
+- (изменены): `app/__init__.py`, `app/web/routes.py`, `app/web/stub_routes.py`,
+  `app/services/section_guard.py`, `frontend/templates/index.html`,
+  `frontend/static/css/main.css`, `tests/test_dev_stubs.py`, `docs/IMPLEMENTATION_STATUS.md`
+
+### Продолжить отсюда
+УЗнТ «заявки на перевозку» — полноценный CRUD. Дальше по плану: тендеры
+(`/uznt/tenders`, `REQUEST_SECTIONS.tenders`) и аналитика заявок (`request_analytics`),
+а также живые данные сентября. Начинать с коммита текущего состояния.
+- `docs/IMPLEMENTATION_STATUS.md` — 238 passed + блок «УЗнТ: заявки на перевозку (2026-09-07)»

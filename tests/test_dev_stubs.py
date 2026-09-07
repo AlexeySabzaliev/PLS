@@ -7,9 +7,11 @@ from app.modules.uss.services import security_intranet
 
 
 def test_uznt_stub_requires_auth(client):
+    # Реальный раздел заявок: страница отрисовывается (API отдаёт 401 без входа).
     resp = client.get("/uznt/requests")
-    assert resp.status_code == 302
-    assert "/" in resp.headers.get("Location", "")
+    assert resp.status_code == 200
+    api = client.get("/api/uznt/requests")
+    assert api.status_code == 401
 
 
 def test_uznt_stub_for_transport(auth_client, client):

@@ -50,13 +50,13 @@
 
         </a>
 
-        <a class="pls-hub-card pls-hub-card--muted" href="/uznt/">
+        <a class="pls-hub-card{% if user and user_has_any_request_section(user) %}{% else %} pls-hub-card--muted{% endif %}" href="/uznt/">
 
-          <span class="pls-hub-card__badge">скоро</span>
+          <span class="pls-hub-card__badge{% if user and user_has_any_request_section(user) %} pls-hub-card__badge--active{% endif %}">{% if user and user_has_any_request_section(user) %}действует{% else %}скоро{% endif %}</span>
 
           <h2>{{ module_uznt }}</h2>
 
-          <p>Заявки на транспортировку GP и материалов — модуль в разработке.</p>
+          <p>Заявки на транспортировку GP и материалов: маршрут, груз, транспорт, статусы.</p>
 
         </a>
 

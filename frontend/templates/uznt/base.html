@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta name="pls-build" content="{{ pls_build }}">
+
+  <title>{% block title %}УЗнТ{% endblock %} — ПЛС</title>
+
+  <link rel="stylesheet" href="/static/css/main.css?v={{ pls_build }}">
+
+</head>
+
+<body class="{% block body_class %}{% endblock %}">
+
+  <header class="pls-header">
+
+    <div class="pls-brand">
+      <a href="/" class="pls-logo" title="Портал логистических систем">ПЛС</a>
+      <span class="pls-brand-sep" aria-hidden="true">/</span>
+      <a href="/uznt/" class="pls-module active" title="Заявки на транспортировку">УЗнТ</a>
+    </div>
+
+    <nav class="pls-nav" aria-label="Навигация УЗнТ">
+      {% if not user or user_has_any_request_section(user) %}
+      <a href="/uznt/requests" class="pls-nav-link{% if active == 'requests' %} active{% endif %}">Заявки</a>
+      {% endif %}
+    </nav>
+
+    {% if user %}
+
+    {% include 'includes/pls_user_bar.html' %}
+
+    {% endif %}
+
+  </header>
+
+  <main class="pls-main pls-main--wide {% block main_class %}{% endblock %}">
+
+    {% block content %}{% endblock %}
+
+  </main>
+
+  <script src="/static/js/pls_header.js?v={{ pls_build }}"></script>
+
+  <script src="/static/js/uznt_common.js?v={{ pls_build }}"></script>
+
+  {% block scripts %}{% endblock %}
+
+</body>
+
+</html>

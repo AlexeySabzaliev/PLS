@@ -33,6 +33,7 @@ def create_app(config_name: str | None = None) -> Flask:
     from app.modules.processes import schema_resolver  # noqa: F401
     from app.modules.reference import models  # noqa: F401
     from app.modules.uss import models as uss_models  # noqa: F401
+    from app.modules.uznt import models as uznt_models  # noqa: F401
 
     from app.api.admin import bp as admin_bp
     from app.api.auth import bp as auth_bp
@@ -42,6 +43,7 @@ def create_app(config_name: str | None = None) -> Flask:
     from app.modules.processes.api import bp as process_bp
     from app.modules.reference.api import bp as ref_bp
     from app.modules.uss.api import bp as uss_bp
+    from app.modules.uznt.api import bp as uznt_bp
     from app.web.routes import bp as web_bp
     from app.web.stub_routes import bp as stub_web_bp
 
@@ -52,6 +54,7 @@ def create_app(config_name: str | None = None) -> Flask:
     app.register_blueprint(ref_bp)
     app.register_blueprint(process_bp)
     app.register_blueprint(uss_bp)
+    app.register_blueprint(uznt_bp)
     app.register_blueprint(billing_bp)
     app.register_blueprint(web_bp)
     app.register_blueprint(stub_web_bp)
@@ -94,7 +97,11 @@ def create_app(config_name: str | None = None) -> Flask:
         return render_template("maintenance.html", user=user, message=message, pls_build=app.config.get("PLS_BUILD_ID", "dev")), 503
 
     from app.cli import register_cli
-    from app.core.permissions import user_has_reference_section, user_has_uss_section
+    from app.core.permissions import (
+        user_has_any_request_section,
+        user_has_reference_section,
+        user_has_uss_section,
+    )
 
     register_cli(app)
 
@@ -104,6 +111,7 @@ def create_app(config_name: str | None = None) -> Flask:
             "pls_build": app.config.get("PLS_BUILD_ID", "dev"),
             "user_has_reference_section": user_has_reference_section,
             "user_has_uss_section": user_has_uss_section,
+            "user_has_any_request_section": user_has_any_request_section,
         }
 
     @app.after_request

@@ -1,0 +1,25 @@
+{% extends "uznt/base.html" %}
+
+{% block title %}Заявки на перевозку{% endblock %}
+
+{% block body_class %}uznt-requests-page{% endblock %}
+
+{% block content %}
+
+  <h1 class="page-title">Заявки на перевозку</h1>
+
+  <p class="uss-shift-lead muted">УЗнТ: заявки GP и материалов на транспортировку — маршрут, груз, транспорт, статус.</p>
+
+  <p id="status" class="status">Загрузка…</p>
+
+  <div id="toolbar" class="uss-shift-toolbar"></div>
+
+  <div id="content" class="uss-shift-content uznt-requests-content"></div>
+
+{% endblock %}
+
+{% block scripts %}
+
+  <script src="/static/js/uznt_requests.js"></script>
+
+{% endblock %}
