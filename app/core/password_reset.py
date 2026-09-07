@@ -111,7 +111,7 @@ def approve_password_reset(
 
     ok, err = validate_password(new_password, email=user.email)
     if not ok:
-        return {"error": err}
+        return {"error": err, "message": err}
 
     user.password_hash = hash_password(new_password)
     row.status = "approved"

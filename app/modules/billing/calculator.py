@@ -10,6 +10,7 @@ from app.modules.billing.storage_strategy import StorageBillingStrategy, billing
 from app.modules.billing.tariffs import diagnose_tariffs_for_billing_period, tariffs_for_billing_period
 from app.modules.reference.models import Contract, ProductType
 from app.modules.uss.models import ShiftReport
+from app.modules.uss.services.shift_day_confirm import is_day_confirmed
 
 
 def _month_bounds(period_from: date, period_to: date) -> tuple[int, int]:
@@ -33,6 +34,7 @@ def load_contract_dict(contract_id: int) -> dict | None:
 
 
 def load_shifts(warehouse_id: int, period_start: date, period_end: date) -> list[dict]:
+    """Складские отчёты — без фильтрации по дням, чтобы не терять данные."""
     rows = (
         ShiftReport.query.filter(
             ShiftReport.warehouse_id == warehouse_id,
@@ -68,14 +70,16 @@ class BillingCalculator:
         if not contract:
             return {"status": "error", "message": "Договор не найден", "error": "contract_not_found"}
 
-        year, month = _month_bounds(period_from, period_to)
-        period_start = date(year, month, 1)
-        if month == 12:
-            period_end = date(year, 12, 31)
-        else:
-            period_end = date(year, month + 1, 1)
-            from datetime import timedelta
-            period_end = period_end - timedelta(days=1)
+        if period_from > period_to:
+            return {
+                "status": "error",
+                "message": "Начало периода не может быть позже конца периода",
+                "error": "invalid_period",
+            }
+
+        period_start = period_from
+        period_end = period_to
+        year, month = period_start.year, period_start.month
 
         tariffs = tariffs_for_billing_period(contract_id, period_start, period_end)
         if not tariffs:
@@ -95,6 +99,8 @@ class BillingCalculator:
 
         lines = StorageBillingStrategy().calculate(
             contract, year, month, tariffs, operations, shifts,
+            period_start=period_start,
+            period_end=period_end,
         )
         total = sum((line.amount_ex_vat for line in lines), Decimal("0"))
         by_code = {line.line_code: billing_line_to_dict(line) for line in lines}

@@ -125,7 +125,7 @@ def post_user_password(user_id: int):
     if err:
         return err
     data = request.get_json(silent=True) or {}
-    password = (data.get("password") or "").strip()
+    password = (data.get("password") or data.get("new_password") or "").strip()
     if not password:
         return {"error": "empty", "message": password_error_message("empty")}, 400
     user, error = admin_set_password(user_id, password)
@@ -143,7 +143,7 @@ def post_password_reset_approve(request_id: int):
     if err:
         return err
     data = request.get_json(silent=True) or {}
-    password = (data.get("password") or "").strip()
+    password = (data.get("password") or data.get("new_password") or "").strip()
     if not password:
         return {"error": "empty", "message": password_error_message("empty")}, 400
     result = approve_password_reset(

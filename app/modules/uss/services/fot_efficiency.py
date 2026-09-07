@@ -102,6 +102,8 @@ def build_fot_report(
             tariffs,
             operations,
             shifts,
+            period_start=period_start,
+            period_end=period_end,
         )
         for on_date, amount in contract_daily.items():
             daily_ops[on_date] = daily_ops.get(on_date, Decimal("0")) + amount

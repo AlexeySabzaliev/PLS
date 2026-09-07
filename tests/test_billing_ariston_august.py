@@ -18,7 +18,7 @@ TOLERANCE = Decimal("0.02")
 def test_ariston_august_billing_matches_excel(migrated_app):
     with migrated_app.app_context():
         seed_reference()
-        fix_ariston_canonical(dry_run=False, with_ds5=False)
+        fix_ariston_canonical(dry_run=False, with_ds5=False, force=True)
         excel_path = resolve_august_excel_path()
         seed_ariston_strelna_august(excel_path=excel_path)
         contract = Contract.query.filter(

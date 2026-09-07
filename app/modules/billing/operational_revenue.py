@@ -52,9 +52,14 @@ def daily_operational_revenue_for_contract(
     tariffs: list[dict],
     operations: list[dict],
     shifts: list[dict],
+    *,
+    period_start: date | None = None,
+    period_end: date | None = None,
 ) -> dict[date, Decimal]:
     """Сумма по операционным строкам биллинга (без хранения) в разрезе календарных дней."""
-    period_start, period_end = _month_bounds(year, month)
+    month_start, month_end = _month_bounds(year, month)
+    period_start = period_start or month_start
+    period_end = period_end or month_end
     daily: dict[date, Decimal] = {}
     cursor = period_start
     while cursor <= period_end:

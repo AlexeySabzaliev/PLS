@@ -76,6 +76,16 @@ def uss_reports_contracts():
     )
 
 
+@bp.get("/uss/reports/arrival-gap")
+def uss_reports_arrival_gap():
+    return render_template(
+        "uss/arrival_gap.html",
+        user=get_current_user(),
+        active="reports",
+        report_section="arrival_gap",
+    )
+
+
 @bp.get("/profile")
 def profile():
     user = get_current_user()

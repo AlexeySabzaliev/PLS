@@ -94,6 +94,45 @@
     toolbarHost.querySelector('.toolbar')?.appendChild(hint);
   }
 
+  function renderDayStatus(toolbarHost, ctx, summary) {
+    const toolbar = toolbarHost.querySelector('.toolbar');
+    if (!toolbar) return;
+    toolbar.querySelector('.day-status-hint')?.remove();
+    toolbar.querySelector('#btn-open-day')?.remove();
+    if (!summary) return;
+    const hint = document.createElement('span');
+    hint.className = 'day-status-hint muted';
+    const confirmedCount = Object.keys(summary.confirmed || {}).filter((k) => summary.confirmed[k]).length;
+    hint.textContent = summary.fully_closed
+      ? `День закрыт: ${confirmedCount}/${summary.roles?.length || 0}`
+      : confirmedCount
+        ? `День открыт: подтверждено ${confirmedCount}/${summary.roles?.length || 0}`
+        : 'День открыт: подтверждений нет';
+    toolbar.appendChild(hint);
+
+    if (!ctx.can_reopen_day || !confirmedCount) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'btn-open-day';
+    btn.className = 'toolbar-btn btn-primary-sm';
+    btn.textContent = 'Открыть день';
+    btn.title = 'Снять подтверждения дня для внесения правок';
+    btn.addEventListener('click', async () => {
+      if (!window.confirm('Открыть этот день для правок? Подтверждения будут сняты.')) return;
+      try {
+        await UssApi.json('/api/uss/day-open', {
+          method: 'POST',
+          body: JSON.stringify({ warehouse_id: Number(ctx.warehouse_id), report_date: ctx.date }),
+        });
+        setStatus('День открыт для правок.');
+        load();
+      } catch (e) {
+        setStatus(e.message, true);
+      }
+    });
+    toolbar.appendChild(btn);
+  }
+
   function fieldValue(vehicle, fieldDef) {
     if (fieldDef.tariff_input || (fieldDef.field && fieldDef.field.startsWith('rq_'))) {
       const code = fieldDef.billing_line_code || fieldDef.field.slice(3);
@@ -389,6 +428,11 @@
       syncBtn.title = 'Загрузить ТС из портала охраны';
       syncBtn.addEventListener('click', () => syncSecurity(warehouseId, ctx.date));
       toolbarEl.querySelector('.toolbar')?.appendChild(syncBtn);
+
+      const daySummary = await UssApi.json(
+        `/api/uss/day-summary?warehouse_id=${warehouseId}&date=${ctx.date}`,
+      );
+      renderDayStatus(toolbarEl, ctx, daySummary);
       renderSecurityHint(toolbarEl, ctx.security, ctx.security_visit_place);
 
       const data = await UssApi.json(

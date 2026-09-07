@@ -6,14 +6,15 @@ from datetime import date
 from flask import Blueprint, g, request
 
 from app.core.auth import login_required, edit_required
-from app.core.permissions import user_has_uss_section
+from app.core.permissions import effective_role_codes, user_has_uss_section
 from app.db import db
 from app.modules.reference.models import Warehouse
-from app.modules.uss.services.fot_efficiency import build_fot_report
+from app.modules.uss.services.arrival_gap_report import build_arrival_gap_report
 from app.modules.uss.services.contracts_registry import build_contracts_registry_report
+from app.modules.uss.services.fot_efficiency import build_fot_report
 from app.modules.uss.services.inventory_shift import get_inventory_shift, save_inventory_shift
 from app.modules.uss.services.report_schema import schema_for_contract_role
-from app.modules.uss.services.shift_day_confirm import confirm_day, day_summary
+from app.modules.uss.services.shift_day_confirm import confirm_day, day_summary, open_day
 from app.modules.uss.services.transport_shift import (
     get_vehicle_audit_log,
     list_transport_shift,
@@ -179,6 +180,23 @@ def post_day_confirm():
     return body, status
 
 
+@bp.post("/day-open")
+@login_required
+@edit_required
+def post_day_open():
+    data = request.get_json(silent=True) or {}
+    wh = data.get("warehouse_id")
+    day = date.fromisoformat(str(data.get("report_date", date.today().isoformat()))[:10])
+    if not wh:
+        return {"error": "missing_params"}, 400
+    role_codes = effective_role_codes(g.user)
+    if not (g.user.get("is_admin") or "commercial_logistics" in role_codes):
+        return {"error": "forbidden"}, 403
+    result = open_day(g.user, int(wh), day)
+    body, status = _api_result(result)
+    return body, status
+
+
 @bp.get("/report-schema")
 @login_required
 def get_report_schema():
@@ -237,6 +255,7 @@ def shift_context():
         contracts = contracts_for_transport_shift(wh_id, day)
     wh = db.session.get(Warehouse, wh_id)
     min_date, max_date = shift_date_bounds()
+    role_codes = effective_role_codes(g.user)
     return {
         "role": role,
         "date": day.isoformat(),
@@ -248,6 +267,7 @@ def shift_context():
         "contracts": serialize_contracts(contracts, day),
         "security": security_status(),
         "security_visit_place": wh.security_visit_place if wh else None,
+        "can_reopen_day": bool(g.user.get("is_admin") or "commercial_logistics" in role_codes),
     }
 
 
@@ -323,4 +343,38 @@ def contracts_registry_report():
         status_filter=status_filter,
     )
     report["warehouses"] = [{"id": w.id, "code": w.code, "name": w.name} for w in warehouses]
+    return report
+
+
+@bp.get("/reports/arrival-gap")
+@login_required
+def arrival_gap_report():
+    """Отчёт отклонений: заявлено в охране vs приехало фактически."""
+    if not user_has_uss_section(g.user, "uss_reports"):
+        return {"error": "forbidden"}, 403
+
+    warehouse_id = request.args.get("warehouse_id", type=int)
+    year = request.args.get("year", type=int)
+    month = request.args.get("month", type=int)
+    if not warehouse_id or not year or not month:
+        return {"error": "missing_params", "message": "warehouse_id, year и month обязательны"}, 400
+    if month < 1 or month > 12:
+        return {"error": "invalid_month"}, 400
+    if not _can_access_warehouse(warehouse_id):
+        return {"error": "forbidden"}, 403
+
+    warehouses = _report_warehouses()
+    if not warehouses:
+        return {"error": "no_warehouses"}, 403
+
+    from calendar import monthrange
+    from datetime import date as _date
+
+    period_from = _date(year, month, 1)
+    period_to = _date(year, month, monthrange(year, month)[1])
+    report = build_arrival_gap_report(warehouse_id, period_from, period_to)
+    report["warehouses"] = [{"id": w.id, "code": w.code, "name": w.name} for w in warehouses]
+    report["warehouse_id"] = warehouse_id
+    report["year"] = year
+    report["month"] = month
     return report

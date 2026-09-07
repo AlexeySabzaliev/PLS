@@ -1,0 +1,21 @@
+{% extends "uss/reports_shell.html" %}
+
+{% block title %}Заявлено vs приехало{% endblock %}
+
+{% block report_content %}
+  <h2>Заявлено vs приехало</h2>
+  <p class="muted">
+    Будущий отчёт отклонений: сколько ТС было заявлено на портале охраны, сколько приехало,
+    сколько отмечено как не прибывшие и сколько строк уже подтверждено в отчётности.
+  </p>
+
+  <p id="status" class="status">Загрузка…</p>
+  <div id="toolbar" class="arrival-gap-toolbar"></div>
+  <div id="summary"></div>
+  <div id="daily"></div>
+  <div id="details"></div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/uss_arrival_gap.js"></script>
+{% endblock %}

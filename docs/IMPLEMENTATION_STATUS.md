@@ -2,8 +2,8 @@
 
 Портал УСС + УЗнТ на `D:\PLS`. Эталон логики: `D:\Billings`.
 
-**Последнее обновление:** 2026-09-02  
-**Тесты:** `pytest -q` — **155 passed**
+**Последнее обновление:** 2026-09-07  
+**Тесты:** `pytest -q` — **226 passed**
 
 ---
 
@@ -56,6 +56,32 @@
 
 - `excel_export.py` — `GET /api/billing/export?contract_id=&year=&month=`, кнопка «Экспорт Excel» в `/uss/billing`
 - `amendments_overview.py` — `GET /api/reference/amendments-overview`, блок обзора на вкладке «Доп. соглашения»
+
+---
+
+## Рефакторинг и отчёты (2026-09-07)
+
+### Биллинг (сверка Ariston / август)
+
+- `BillingCalculator` теперь считает по факт-границам `period_from`/`period_to`, а не фиксирует месяц (валидация `period_from > period_to`).
+- `StorageBillingStrategy` и `operational_revenue` принимают явные границы периода; `daily_operational_revenue` умеет срез по периоду.
+- Включены кастомные строки тарифа с ручными источниками (`manual_vehicle`/`manual_daily`) — решена задача из `REFACTORING_PLAN.md` №2.
+- Тест `test_billing_ariston_august.py::test_ariston_august_billing_matches_excel` — **passed** (эталон = Excel август, переносом из Billings). Сентябрь: данные будут наполняться вручную с 2026-09-08, проверка по кодам и формулам.
+
+### Охрана (портал security, задача №1)
+
+- `_fetch_raw_requests`: при отсутствии live-SSO `SECURITY_USE_LOCAL_DB` делает offline-fallback на локальную БД с меткой источника `local_db_offline` (при error — `local_db_fallback`).
+- Тест `test_security_sql_import.py::test_fetch_from_local_db` приведён к новому контракту (`src.startswith("local_db")`).
+
+### Отчёт отклонений «заявлено в охране vs приехало» (задача №4)
+
+- `arrival_gap_report.py` — агрегаты по дням: `planned`, `arrived`, `no_show`, `processed`, `gap = planned − arrived`, `confirmation_rate = processed / planned × 100`.
+- API `GET /api/uss/transport/arrival-gap` + шаблон `uss/arrival_gap.html` + JS `uss_arrival_gap.js` + пункт навигации.
+- Тест `test_arrival_gap_report.py` — формулы по кодам (source=`security`), `warehouse_not_found`.
+
+### Прочее
+
+- `tests/test_password.py::test_change_password` — исправлен предсуществующий сбой: проверка входа теперь через HTTP-эндпоинт, а не прямой вызов `login_user_password()` вне request-контекста.
 
 ---
 

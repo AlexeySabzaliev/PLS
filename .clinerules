@@ -1,0 +1,30 @@
+# Правила проекта ПЛС
+
+## Стек
+- Backend: Flask, Python 3
+- БД: PostgreSQL (SQLAlchemy), опционально SQLite
+- Фронтенд: HTML-шаблоны (Jinja2), JS, CSS
+- Тесты: pytest
+- Контейнер: Docker Compose (только postgres)
+
+## Структура проекта
+- app/core/ — авторизация, SSO, права
+- app/modules/reference/ — справочники (CRUD API)
+- app/modules/processes/ — конфигураторы линий процессов
+- app/modules/uss/ — операции смен (transport, warehouse, inventory)
+- app/modules/billing/ — калькуляция (заглушка, фаза 4)
+- frontend/ — шаблоны и статика
+- tests/ — тесты
+
+## Команды
+- Запуск: python run.py
+- Инициализация БД: flask pls init-db --demo
+- Тесты: pytest -v
+- Проверка БД: flask pls db-check
+
+## Конвенции
+- Используй существующие паттерны из app/modules/reference/ как образец
+- Новые эндпоинты REST API — в app/modules/*/routes.py
+- Модели — в app/modules/*/models.py
+- Тесты — в tests/test_*.py
+- Не трогай app/core/ без явного указания

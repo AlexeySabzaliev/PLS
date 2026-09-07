@@ -105,6 +105,7 @@ def load_vehicle_operations(
     period_start: date,
     period_end: date,
 ) -> list[dict]:
+    """Операции ТС за период — без фильтра по обязательным полям, чтобы не терять ретроспективные данные."""
     rows = (
         VehicleOperation.query.filter(
             VehicleOperation.contract_id == contract_id,
@@ -116,4 +117,7 @@ def load_vehicle_operations(
         .all()
     )
     work_end = warehouse_work_day_end(warehouse_id)
-    return [vehicle_operation_to_billing_dict(r, work_day_end=work_end) for r in rows]
+    return [
+        vehicle_operation_to_billing_dict(r, work_day_end=work_end)
+        for r in rows
+    ]

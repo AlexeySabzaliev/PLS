@@ -644,30 +644,37 @@ def fetch_vehicle_requests(
 
     out: list[SecurityVehicleRow] = []
     seen: set[str] = set()
-    for raw in prefetched:
-        if not _row_matches_client(raw, client_name, security_name):
-            continue
-        if not _row_matches_place(raw, visit_place):
-            continue
-        if not _row_active_on(raw, day):
-            continue
-        if stats is not None:
-            stats["matched_filters"] = stats.get("matched_filters", 0) + 1
-        item = _normalize_row(raw)
-        if not item:
+
+    def _append_rows(rows: list[dict], *, relaxed_place: bool = False) -> None:
+        for raw in rows:
+            if not _row_matches_client(raw, client_name, security_name):
+                continue
+            if not relaxed_place and not _row_matches_place(raw, visit_place):
+                continue
+            if not _row_active_on(raw, day):
+                continue
             if stats is not None:
-                stats["skipped_no_plate"] = stats.get("skipped_no_plate", 0) + 1
-                samples = stats.setdefault("skipped_samples", [])
-                if len(samples) < 5:
-                    sample = _vehicle_raw_from_row(raw) or str(raw.get("id") or "")
-                    if sample and sample not in samples:
-                        samples.append(sample[:120])
-            continue
-        if item.request_id in seen:
-            continue
-        item.matched_client = client_name
-        seen.add(item.request_id)
-        out.append(item)
+                stats["matched_filters"] = stats.get("matched_filters", 0) + 1
+            item = _normalize_row(raw)
+            if not item:
+                if stats is not None:
+                    stats["skipped_no_plate"] = stats.get("skipped_no_plate", 0) + 1
+                    samples = stats.setdefault("skipped_samples", [])
+                    if len(samples) < 5:
+                        sample = _vehicle_raw_from_row(raw) or str(raw.get("id") or "")
+                        if sample and sample not in samples:
+                            samples.append(sample[:120])
+                continue
+            if item.request_id in seen:
+                continue
+            item.matched_client = client_name
+            seen.add(item.request_id)
+            out.append(item)
+
+    _append_rows(prefetched)
+    if not out and visit_place:
+        # Если портал отдал заявки, но они не совпали по месту визита, пробуем мягкий live-фильтр.
+        _append_rows(prefetched, relaxed_place=True)
     _agent_log(
         "H2",
         "security_intranet.fetch_vehicle_requests",

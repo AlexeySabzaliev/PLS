@@ -1,7 +1,17 @@
 <nav class="pls-nav" aria-label="Навигация УСС">
+  {% if not user or user_has_uss_section(user, 'uss_ops_transport') %}
   <a href="/uss/transport" class="pls-nav-link{% if active == 'transport' %} active{% endif %}">Транспортная логистика</a>
+  {% endif %}
+  {% if not user or user_has_uss_section(user, 'uss_ops_warehouse') %}
   <a href="/uss/warehouse" class="pls-nav-link{% if active == 'warehouse' %} active{% endif %}">Складская логистика</a>
+  {% endif %}
+  {% if not user or user_has_uss_section(user, 'uss_ops_inventory') %}
   <a href="/uss/inventory" class="pls-nav-link{% if active == 'inventory' %} active{% endif %}">Управление запасами</a>
+  {% endif %}
+  {% if not user or user_has_uss_section(user, 'uss_reports') %}
   <a href="/uss/reports/billing" class="pls-nav-link{% if active == 'reports' %} active{% endif %}">Отчёты</a>
+  {% endif %}
+  {% if not user or user_has_reference_section(user, 'ref_vehicle_types') or user_has_reference_section(user, 'ref_clients') or user_has_reference_section(user, 'ref_contracts') or user_has_reference_section(user, 'ref_amendments') or user_has_reference_section(user, 'ref_locations') or user_has_reference_section(user, 'ref_tariff_codes') or user_has_reference_section(user, 'ref_units') or user_has_reference_section(user, 'ref_staff') or user_has_reference_section(user, 'ref_roles') or user_has_reference_section(user, 'ref_permissions') %}
   <a href="/admin/reference" class="pls-nav-link{% if active == 'reference' %} active{% endif %}">Справочники</a>
+  {% endif %}
 </nav>

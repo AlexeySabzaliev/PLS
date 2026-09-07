@@ -388,11 +388,14 @@ class StorageBillingStrategy:
         operations: list[dict],
         shifts: list[dict],
         snapshots: list[dict] | None = None,
+        period_start: date | None = None,
+        period_end: date | None = None,
         **_kwargs,
     ) -> list[BillingLineResult]:
         snapshots = snapshots or []
-        period_start, period_end = _month_bounds(year, month)
-        days = _days_in_month(year, month)
+        if period_start is None or period_end is None:
+            period_start, period_end = _month_bounds(year, month)
+        days = (period_end - period_start).days + 1
         config = contract.get("billing_config") or {}
         lines: list[BillingLineResult] = []
         area_mode = config.get("area_mode", "two_tier")

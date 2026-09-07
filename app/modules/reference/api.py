@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 
 from app.core.auth import login_required
-from app.core.permissions import user_has_reference_section
+from app.core.permissions import user_has_reference_section, user_has_uss_section
 from app.db import db
 from app.modules.reference.client_names import canonical_client_name, find_duplicate_client_name
 from app.modules.reference.amendment_apply import apply_parsed_to_amendment
@@ -471,7 +471,11 @@ def _prepare_tariff_create(data: dict) -> tuple[dict, tuple[dict, int] | None]:
 
 def _check_ref_access(catalog: str) -> bool:
     section = SECTION_MAP.get(catalog, "ref_clients")
-    return user_has_reference_section(g.user, section)
+    if user_has_reference_section(g.user, section):
+        return True
+    if catalog == "vehicle_types" and user_has_uss_section(g.user, "uss_catalog_vehicle_types"):
+        return True
+    return False
 
 
 def _get_catalog(catalog: str):

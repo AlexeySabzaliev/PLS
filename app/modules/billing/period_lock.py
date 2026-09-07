@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from app.db import db
 from app.modules.billing.models import BillingPeriod, PERIOD_STATUSES
@@ -20,6 +20,21 @@ STATUS_LABELS = {
 
 class PeriodLockedError(ValueError):
     """Период закрыт для изменений."""
+
+
+def _to_decimal(value: Decimal | float | int | str | None) -> Decimal | None:
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return value
+    text = str(value).strip().replace("\u00a0", "").replace(" ", "").replace("₽", "")
+    if not text:
+        return None
+    text = text.replace(",", ".")
+    try:
+        return Decimal(text)
+    except (InvalidOperation, ValueError):
+        return None
 
 
 def get_period(contract_id: int, year: int, month: int) -> BillingPeriod | None:
@@ -139,8 +154,9 @@ def lock_period(
         )
         db.session.add(period)
     period.status = status
-    if total_ex_vat is not None:
-        period.total_ex_vat = Decimal(str(total_ex_vat))
+    parsed_total = _to_decimal(total_ex_vat)
+    if parsed_total is not None:
+        period.total_ex_vat = parsed_total
     period.locked_by = user.get("id")
     period.locked_at = datetime.utcnow()
     db.session.commit()
@@ -177,6 +193,8 @@ def upsert_period_total(
         )
         db.session.add(period)
     if period.status == "draft":
-        period.total_ex_vat = Decimal(str(total_ex_vat))
+        parsed_total = _to_decimal(total_ex_vat)
+        if parsed_total is not None:
+            period.total_ex_vat = parsed_total
     db.session.commit()
     return period

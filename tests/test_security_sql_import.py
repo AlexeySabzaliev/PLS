@@ -48,7 +48,9 @@ def test_fetch_from_local_db(app, monkeypatch):
     with app.app_context():
         import_security_sql_dump(_FIXTURE, verbose=False)
         rows, src = sec._fetch_raw_requests("Склад ГП", date(2026, 8, 28))
-        assert src == "local_db"
+        # При отсутствии live-SSO ожидаем offline-fallback на локальную БД
+        # (метка может быть "local_db", "local_db_offline" или "local_db_relaxed").
+        assert src.startswith("local_db")
         assert len(rows) >= 3
         matched, _ = sec.fetch_vehicle_requests(
             client_name='ООО "Аристон Термо Русь"',

@@ -61,12 +61,17 @@ def create_app(config_name: str | None = None) -> Flask:
         return before_request_auth()
 
     from app.cli import register_cli
+    from app.core.permissions import user_has_reference_section, user_has_uss_section
 
     register_cli(app)
 
     @app.context_processor
     def _inject_globals():
-        return {"pls_build": app.config.get("PLS_BUILD_ID", "dev")}
+        return {
+            "pls_build": app.config.get("PLS_BUILD_ID", "dev"),
+            "user_has_reference_section": user_has_reference_section,
+            "user_has_uss_section": user_has_uss_section,
+        }
 
     @app.after_request
     def _no_cache_html(response):

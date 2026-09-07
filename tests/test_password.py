@@ -1,5 +1,5 @@
 """Пароли: политика, смена, админ."""
-from app.core.auth import change_user_password, hash_password, login_user_password, set_user_password
+from app.core.auth import change_user_password, hash_password, set_user_password
 from app.core.passwords import validate_password
 from app.modules.reference.models import User
 
@@ -33,8 +33,11 @@ def test_change_password(auth_client, client, app):
     )
     assert resp.status_code == 200
     client.post("/api/auth/logout")
-    ok, _ = login_user_password("admin@test.local", "Admin1234")
-    assert ok is not None
+    login = client.post(
+        "/api/auth/login",
+        json={"email": "admin@test.local", "password": "Admin1234"},
+    )
+    assert login.status_code == 200
     with app.app_context():
         user = User.query.filter_by(email="admin@test.local").first()
         user.password_hash = hash_password("admin")

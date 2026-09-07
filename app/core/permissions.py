@@ -43,6 +43,7 @@ REFERENCE_SECTIONS: dict[str, frozenset[str]] = {
     "admin": frozenset({"ref_clients", "ref_contracts", "ref_amendments", "ref_locations",
                          "ref_tariff_codes", "ref_units", "ref_staff", "ref_vehicle_types",
                          "ref_roles", "ref_permissions"}),
+    "transport_logistics": frozenset({"ref_vehicle_types"}),
     "commercial_logistics": frozenset({
         "ref_clients", "ref_contracts", "ref_amendments", "ref_tariff_codes",
     }),

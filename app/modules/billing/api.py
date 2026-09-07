@@ -148,6 +148,8 @@ def calculate():
     pf = date.fromisoformat(str(period_from)[:10])
     pt = date.fromisoformat(str(period_to)[:10])
     year, month = pf.year, pf.month
+    if pf.year != pt.year or pf.month != pt.month:
+        return {"error": "invalid_period", "message": "Расчёт поддерживает только один месяц за раз"}, 400
     try:
         assert_billing_calculable(g.user, int(contract_id), year, month)
     except PeriodLockedError as exc:
