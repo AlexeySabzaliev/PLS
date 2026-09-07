@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 
-from flask import Flask
+from flask import Flask, g, jsonify, render_template, request
 
 from app.config import config
 from app.core.auth import before_request_auth
@@ -59,6 +59,39 @@ def create_app(config_name: str | None = None) -> Flask:
     @app.before_request
     def _auth():
         return before_request_auth()
+
+    from app.services.section_guard import active_blocker
+
+    @app.before_request
+    def _section_maintenance_guard():
+        """Точечная блокировка раздела/роли заглушкой (админ ставит/снимает).
+
+        Работает на весь портал (УСС, УЗнТ, справочники) — блокируется только
+        затронутая часть, остальной портал продолжает работать.
+        """
+        user = getattr(g, "user", None)
+        if not user or user.get("is_admin"):
+            return None
+        from app.core.auth import PUBLIC_PATHS
+
+        path = request.path
+        if (
+            path.startswith("/static/")
+            or path in PUBLIC_PATHS
+            or path.startswith("/api/maintenance")
+            or path.startswith("/api/auth/")
+        ):
+            return None
+        entry = active_blocker(user, path, request.query_string)
+        if not entry:
+            return None
+        _target_type, _target_key, message = entry
+        if path.startswith("/api/"):
+            return (
+                jsonify({"error": "maintenance", "message": message, "section": _target_key}),
+                503,
+            )
+        return render_template("maintenance.html", user=user, message=message, pls_build=app.config.get("PLS_BUILD_ID", "dev")), 503
 
     from app.cli import register_cli
     from app.core.permissions import user_has_reference_section, user_has_uss_section

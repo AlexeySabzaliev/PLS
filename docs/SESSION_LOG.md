@@ -38,6 +38,48 @@
 - `tests/test_security_sql_import.py` — контракт источника `local_db*` (M)
 - `tests/test_password.py` — вход через HTTP, чище импорт (M)
 - `tests/test_arrival_gap_report.py` — новый тест формул отчёта (новый)
+
+---
+
+## 2026-09-07 — Сессия 2: модульные техработы-заглушки на весь портал
+
+### Цель сессии
+«Заглушки на разделы и роли, как в ОУБ, но на весь ПЛС (с учётом УЗнТ)»: точечная
+блокировка части портала на время работ/багфиксов, чтобы не останавливать всё.
+Ставит/снимает заглушку **только админ**.
+
+### Контекст
+Сначала выполнен `commit+push` рабочего дерева (эталон-бриф) — состояние зафиксировано:
+`2acdde0 docs: эталон-бриф PLS`. Механика `section_maintenance` (модель, `/api/maintenance`,
+`maintenance_for_user`) уже существовала, но нигде не применялась для блокировки.
+
+### Что сделано
+1. **`app/services/section_guard.py` (новый)** — реестр разделов всего портала
+   (УСС, УЗнТ, справочники), резолвер «путь+query → раздел», `active_blocker()`,
+   `portal_catalog()` для админ-панели.
+2. **Enforcement** в `app/__init__.py` (`before_request` после `_auth`): не-админ на
+   разделе под заглушкой получает 503 (HTML-страница `maintenance.html` или JSON для API);
+   блокируется только затронутая часть, остальной портал работает. Роль под заглушкой —
+   блок на входные точки портала этой роли. Админ и `/api/maintenance*`, `/api/auth/*`,
+   `/static/` не блокируются.
+3. **`frontend/templates/maintenance.html` (новый)** — страница-заглушка.
+4. **Админ-панель «Заглушки (техработы)»** в разделе «Справочники»:
+   `frontend/static/js/maintenance-admin.js` (новый) + интеграция в `reference-ui.js`
+   (кнопка в навигации, рендер/загрузка/init) + эндпоинт `GET /api/maintenance/catalog` (admin).
+5. **Тесты**: добавлены 5 в `tests/test_dev_stubs.py` (блокировка только затронутого раздела,
+   admin-bypass, снятие заглушки восстанавливает доступ, роль-заглушка на входе, catalog-эндпоинт).
+6. **Тесты**: **231 passed** (226 + 5 новых), прогон по группам — все зелёные.
+
+### Файлы
+- (новые): `app/services/section_guard.py`, `frontend/templates/maintenance.html`,
+  `frontend/static/js/maintenance-admin.js`
+- (изменены): `app/__init__.py`, `app/api/maintenance.py`, `frontend/static/js/reference-ui.js`,
+  `frontend/templates/admin/reference.html`, `tests/test_dev_stubs.py`, `docs/IMPLEMENTATION_STATUS.md`
+
+### Продолжить отсюда
+Механизм заглушек работает на весь портал. Далее по запросу: начать имплементацию **УЗнТ
+из Transport** (модель, API, blueprint), аккуратно с БД и уже реализованным (не помечать
+`/app/core/` без явного указания).
 - `docs/IMPLEMENTATION_STATUS.md` — 226 passed + блок «Рефакторинг и отчёты 2026-09-07» (M)
 
 ### Остановились здесь (TODO)

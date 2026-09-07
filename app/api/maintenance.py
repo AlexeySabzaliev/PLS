@@ -10,6 +10,7 @@ from app.services.maintenance import (
     maintenance_for_user,
     upsert_maintenance,
 )
+from app.services.section_guard import portal_catalog
 
 bp = Blueprint("maintenance_api", __name__, url_prefix="/api/maintenance")
 
@@ -18,6 +19,15 @@ def _require_admin():
     if not g.user or not g.user.get("is_admin"):
         return {"error": "forbidden"}, 403
     return None
+
+
+@bp.get("/catalog")
+@login_required
+def catalog():
+    err = _require_admin()
+    if err:
+        return err
+    return portal_catalog()
 
 
 @bp.get("/active")

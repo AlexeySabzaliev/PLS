@@ -1345,6 +1345,19 @@
       }
       return;
     }
+    if (current === 'maintenance') {
+      if (window.PlsMaintenanceAdmin) {
+        window.PlsMaintenanceAdmin.render({
+          panelEl,
+          statusEl,
+          setStatus,
+          setHintVisible,
+        });
+      } else {
+        panelEl.innerHTML = '<p class="status error">Модуль maintenance-admin.js не загружен.</p>';
+      }
+      return;
+    }
     const cat = catMeta();
     if (cat.custom_ui && current === 'warehouse_staff') {
       renderWarehouseStaff();
@@ -1623,6 +1636,12 @@
       btn.textContent = 'Пользователи и доступ';
       btn.addEventListener('click', () => selectCatalog('user_access'));
       navEl.appendChild(btn);
+      const mtn = document.createElement('button');
+      mtn.type = 'button';
+      mtn.className = current === 'maintenance' ? 'active ref-nav-item--admin' : 'ref-nav-item--admin';
+      mtn.textContent = 'Заглушки (техработы)';
+      mtn.addEventListener('click', () => selectCatalog('maintenance'));
+      navEl.appendChild(mtn);
     }
   }
 
@@ -1647,6 +1666,10 @@
       renderCurrent();
       return;
     }
+    if (current === 'maintenance') {
+      renderCurrent();
+      return;
+    }
     const data = await api(`/api/reference/${current}`);
     items = data.items || [];
     renderCurrent();
@@ -1663,11 +1686,11 @@
     showAdvanced = false;
     showAddForm = false;
     showStaffAddForm = false;
-    setHintVisible(code !== 'user_access');
+    setHintVisible(code !== 'user_access' && code !== 'maintenance');
     renderNav();
     setStatus('Загрузка…');
     try {
-      if (code === 'user_access') {
+      if (code === 'user_access' || code === 'maintenance') {
         await loadItems();
         return;
       }
@@ -1696,6 +1719,10 @@
       const initial = qs.get('catalog');
       if (initial === 'user_access' && document.body.dataset.admin === '1') {
         await selectCatalog('user_access');
+        return;
+      }
+      if (initial === 'maintenance' && document.body.dataset.admin === '1') {
+        await selectCatalog('maintenance');
         return;
       }
       const first = (initial && meta.some((c) => c.code === initial)) ? initial : meta[0].code;

@@ -87,3 +87,108 @@ def test_maintenance_api(auth_client, client):
     resp2 = client.get("/api/auth/me")
     assert resp2.status_code == 200
     assert resp2.json["maintenance"]["sections"].get("billing") == "Техработы"
+
+
+def test_section_maintenance_blocks_only_affected_section(auth_client, client):
+    # Админ ставит заглушку только на УЗнТ-раздел «заявки».
+    auth_client("admin@test.local", "admin")
+    r = client.post(
+        "/api/maintenance",
+        json={
+            "target_type": "section",
+            "target_key": "requests_transport",
+            "message": "Техработы УЗнТ",
+            "is_active": True,
+        },
+    )
+    assert r.status_code == 200
+
+    # Сотрудник с доступом: заявка на перевозку заблокирована (503)…
+    auth_client("transport@test.local", "test")
+    resp = client.get("/uznt/requests")
+    assert resp.status_code == 503
+    assert "Техработы УЗнТ" in resp.get_data(as_text=True)
+
+    # …но транспорт УСС работает — блокируется только затронутая часть.
+    resp2 = client.get("/uss/transport")
+    assert resp2.status_code == 200
+
+
+def test_section_maintenance_admin_bypass(auth_client, client):
+    auth_client("admin@test.local", "admin")
+    client.post(
+        "/api/maintenance",
+        json={
+            "target_type": "section",
+            "target_key": "requests_transport",
+            "message": "Техработы УЗнТ",
+            "is_active": True,
+        },
+    )
+    # Админ заглушкой не блокируется.
+    resp = client.get("/uznt/requests")
+    assert resp.status_code == 200
+
+
+def test_section_maintenance_deactivate_restores_access(auth_client, client):
+    auth_client("admin@test.local", "admin")
+    client.post(
+        "/api/maintenance",
+        json={
+            "target_type": "section",
+            "target_key": "requests_transport",
+            "message": "Техработы",
+            "is_active": True,
+        },
+    )
+    client.post(
+        "/api/maintenance",
+        json={
+            "target_type": "section",
+            "target_key": "requests_transport",
+            "message": "Техработы",
+            "is_active": False,
+        },
+    )
+    auth_client("transport@test.local", "test")
+    resp = client.get("/uznt/requests")
+    assert resp.status_code == 200
+
+
+def test_role_maintenance_blocks_entry_for_role(auth_client, client):
+    auth_client("admin@test.local", "admin")
+    r = client.post(
+        "/api/maintenance",
+        json={
+            "target_type": "role",
+            "target_key": "transport_logistics",
+            "message": "Роль на техобслуживании",
+            "is_active": True,
+        },
+    )
+    assert r.status_code == 200
+    # Сотрудник этой роли блокируются на входе в портал.
+    auth_client("transport@test.local", "test")
+    resp = client.get("/uss/")
+    assert resp.status_code == 503
+    assert "Роль на техобслуживании" in resp.get_data(as_text=True)
+    # Админ — нет.
+    auth_client("admin@test.local", "admin")
+    resp2 = client.get("/uss/")
+    assert resp2.status_code == 200
+
+
+def test_maintenance_catalog_admin(auth_client, client):
+    auth_client("admin@test.local", "admin")
+    resp = client.get("/api/maintenance/catalog")
+    assert resp.status_code == 200
+    payload = resp.json
+    assert payload["modules"]
+    assert payload["sections"]
+    assert payload["roles"]
+    keys = {s["key"] for s in payload["sections"]}
+    assert {"uss_home", "requests_transport", "ref_clients"} <= keys
+    # Не-админ не получает реестр.
+    auth_client("transport@test.local", "test")
+    resp2 = client.get("/api/maintenance/catalog")
+    assert resp2.status_code == 403
