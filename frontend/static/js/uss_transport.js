@@ -111,34 +111,9 @@
         : 'День открыт: подтверждений нет';
     toolbar.appendChild(hint);
 
-    // Кнопка подтверждения дня для транспортной логистики
-    const isMyRoleConfirmed = summary.confirmed?.['transport_logistics'];
-    if (!summary.fully_closed && !isMyRoleConfirmed && ctx.date <= UssApi.today()) {
-      const btnConfirm = document.createElement('button');
-      btnConfirm.type = 'button';
-      btnConfirm.id = 'btn-confirm-day';
-      btnConfirm.className = 'toolbar-btn btn-primary-sm';
-      btnConfirm.textContent = 'Подтвердить день';
-      btnConfirm.title = 'Подтвердить отчёт транспортной логистики за этот день';
-      btnConfirm.addEventListener('click', async () => {
-        if (!window.confirm('Подтвердить день отчётом транспортной логистики? После этого изменения потребуют открытия дня коммерческой логистикой.')) return;
-        try {
-          await UssApi.json('/api/uss/day-confirm', {
-            method: 'POST',
-            body: JSON.stringify({ 
-              warehouse_id: Number(ctx.warehouse_id), 
-              report_date: ctx.date,
-              report_role: 'transport_logistics'
-            }),
-          });
-          setStatus('День подтверждён.');
-          load();
-        } catch (e) {
-          setStatus(e.message, true);
-        }
-      });
-      toolbar.appendChild(btnConfirm);
-    }
+    // Вызываем общую функцию рендеринга кнопок подтверждения из uss_common.js
+    // Это обеспечит единый текст и расположение кнопки для всех ролей
+    UssApi.renderDayStatusToolbar(toolbar, ctx, summary, 'transport_logistics', setStatus, load);
 
     if (!ctx.can_reopen_day || !confirmedCount) return;
     const btn = document.createElement('button');
