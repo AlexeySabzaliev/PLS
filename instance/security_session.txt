@@ -1,0 +1,5 @@
+# Netscape HTTP Cookie File
+# http://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file!  Do not edit.
+
+security.bsh-ru.ru	FALSE	/	TRUE	1788937133	security_session	eyJ1c2VybmFtZSI6InNhYnphbGlldiIsImV4cCI6MTc4ODkzNzEzMjg0Nn0.q02FMBrfFqDQvT1yfDZVpyK1ui6ykQil-THkWtymMdk
