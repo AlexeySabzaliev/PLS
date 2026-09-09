@@ -563,8 +563,8 @@
     sectionRows.forEach((row, idx) => {
       const rowKey = String(row.id);
       const rowEditing = editingRows.has(rowKey);
-      html += `<tr data-id="${row.id}" class="${rowEditing ? 'editing' : ''}">`;
-      html += `<td class="row-num">${idx + 1}</td>`;
+      html += `<tr data-id="${row.id}" class="${rowEditing ? 'editing' : ''}" draggable="true">`;
+      html += `<td class="row-num" style="cursor:move;">☰ ${idx + 1}</td>`;
       html += renderTariffRowCells(cat, fields, row, rowEditing);
       html += '<td class="row-actions">';
       if (rowEditing) {
@@ -1733,4 +1733,78 @@
   }
 
   init();
+})();
+
+// Drag & Drop для сортировки ставок в справочнике
+(function initTariffDragDrop() {
+  let dragSrcEl = null;
+
+  function addDragAndDropHandlers() {
+    const rows = document.querySelectorAll('.ref-tariff-table tr[draggable="true"]');
+    rows.forEach(row => {
+      row.addEventListener('dragstart', handleDragStart);
+      row.addEventListener('dragover', handleDragOver);
+      row.addEventListener('drop', handleDrop);
+      row.addEventListener('dragend', handleDragEnd);
+    });
+  }
+
+  function handleDragStart(e) {
+    dragSrcEl = this;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', this.dataset.id);
+    this.classList.add('dragging');
+  }
+
+  function handleDragOver(e) {
+    if (e.preventDefault) e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+  }
+
+  function handleDrop(e) {
+    if (e.stopPropagation) e.stopPropagation();
+    const targetRow = this.closest('tr');
+    if (dragSrcEl !== targetRow) {
+      const srcId = dragSrcEl.dataset.id;
+      const targetId = targetRow.dataset.id;
+      if (srcId && targetId) {
+        reorderTariffRows(srcId, targetId);
+      }
+    }
+    return false;
+  }
+
+  function handleDragEnd() {
+    this.classList.remove('dragging');
+    dragSrcEl = null;
+  }
+
+  async function reorderTariffRows(srcId, targetId) {
+    const statusEl = document.getElementById('status');
+    try {
+      const response = await fetch('/api/tariff/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ src_id: srcId, target_id: targetId })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || data.error || 'HTTP ' + response.status);
+      await selectCatalog(current);
+      if (statusEl) {
+        statusEl.textContent = 'Порядок ставок обновлён';
+        statusEl.className = 'status';
+      }
+    } catch (e) {
+      if (statusEl) {
+        statusEl.textContent = 'Ошибка при изменении порядка: ' + e.message;
+        statusEl.className = 'status error';
+      }
+    }
+  }
+
+  setTimeout(() => {
+    addDragAndDropHandlers();
+  }, 1000);
 })();

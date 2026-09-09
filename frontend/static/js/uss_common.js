@@ -792,6 +792,16 @@ const UssApi = {
     container.appendChild(form);
   },
 
+  getRoleLabel(role) {
+    const labels = {
+      transport_logistics: 'транспортной логистики',
+      warehouse_logistics: 'складской логистики',
+      inventory_management: 'управления запасами',
+      commercial_logistics: 'коммерческой логистики',
+    };
+    return labels[role] || role;
+  },
+
   async renderDayStatusToolbar(container, ctx, summary, role, setStatus, loadCallback) {
     if (!container || !summary) return;
     const toolbar = container.querySelector('.toolbar');
@@ -817,17 +827,17 @@ const UssApi = {
         : 'День открыт: подтверждений нет';
     toolbar.appendChild(hint);
 
-    // Кнопка подтверждения для текущей роли
+    // Кнопка подтверждения для текущей роли (унифицированный текст)
     const isMyRoleConfirmed = summary.confirmed?.[role];
     if (!summary.fully_closed && !isMyRoleConfirmed && ctx.date <= this.today()) {
       const btnConfirm = document.createElement('button');
       btnConfirm.type = 'button';
       btnConfirm.id = `btn-confirm-day-${role}`;
       btnConfirm.className = 'toolbar-btn btn-primary-sm';
-      btnConfirm.textContent = 'Подтвердить день';
-      btnConfirm.title = `Подтвердить отчёт за этот день (${role})`;
+      btnConfirm.textContent = 'Подтвердить ввод данных за день';
+      btnConfirm.title = `Подтвердить отчёт ${this.getRoleLabel(role)} за этот день`;
       btnConfirm.addEventListener('click', async () => {
-        if (!window.confirm(`Подтвердить день отчётом? После этого изменения потребуют открытия дня коммерческой логистикой.`)) return;
+        if (!window.confirm(`Подтвердить ввод данных за день? После этого изменения потребуют открытия дня коммерческой логистикой.`)) return;
         try {
           await this.json('/api/uss/day-confirm', {
             method: 'POST',
