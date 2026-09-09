@@ -249,6 +249,11 @@ def effective_quantity_source(tariff: dict) -> str:
 
     if accounting == "billing_only":
         return "none"
+    
+    # Если пользователь явно указал источник (особенно для transport_logistics), сохраняем его
+    if explicit in QUANTITY_SOURCES and role == "transport_logistics":
+        return explicit
+    
     if accounting == "system" and reg:
         return reg.quantity_source
 
