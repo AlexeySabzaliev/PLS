@@ -239,7 +239,11 @@ def line_def(billing_line_code: str | None) -> LineQuantityDef | None:
 
 
 def effective_quantity_source(tariff: dict) -> str:
-    """Источник количества: роль отчёта и реестр кодов важнее устаревшего quantity_source в БД."""
+    """Источник количества: роль отчёта и реестр кодов важнее устаревшего quantity_source в БД.
+    
+    ВАЖНО: Если пользователь явно выбрал ручной источник (manual_vehicle, manual_daily, manual_inventory),
+    мы обязаны сохранить этот выбор, а не перезаписывать его логикой авто-расчета.
+    """
     code = (tariff.get("billing_line_code") or "").strip()
     reg = line_def(code)
     role = (tariff.get("report_role") or "").strip()
@@ -247,23 +251,29 @@ def effective_quantity_source(tariff: dict) -> str:
     explicit = (tariff.get("quantity_source") or "").strip()
     accounting = (tariff.get("accounting_mode") or "").strip()
 
+    # 1. Если явно указан режим "Только биллинг" — ничего не считаем
     if accounting == "billing_only":
         return "none"
     
-    # Если пользователь явно указал источник (особенно для transport_logistics), сохраняем его
-    if explicit in QUANTITY_SOURCES and role == "transport_logistics":
+    # 2. ГЛАВНОЕ ИСПРАВЛЕНИЕ:
+    # Если пользователь явно выбрал ручной источник, сохраняем его.
+    # Это позволяет переключать "Авто" -> "Ручной ввод на ТС" и сохранять это.
+    if explicit in MANUAL_INPUT_SOURCES:
         return explicit
     
+    # 3. Если режим "Система" и ставка автоматическая (жестко задана) — используем авто
     if accounting == "system" and reg:
         return reg.quantity_source
 
+    # 4. Жестко автоматические коды (нельзя переключить на ручные через UI)
     if reg and reg.quantity_source in INTRINSIC_AUTO_SOURCES:
         return reg.quantity_source
 
+    # 5. Роль по умолчанию для этой ставки
     if reg and reg.default_report_role and role == reg.default_report_role:
         return reg.quantity_source
 
-    # Роль отчёта задаёт ручной ввод (исправляет manual_daily у repack_units и т.п.)
+    # 6. Обработка по ролям (транспорт, склад, управление запасами)
     if role == "inventory_management":
         return "manual_inventory"
     if role in ROLE_ALLOWED_SOURCES:
@@ -276,10 +286,15 @@ def effective_quantity_source(tariff: dict) -> str:
             return explicit
         return ROLE_OPERATIONAL_DEFAULTS[role][0]
 
+    # 7. Если есть явное значение в БД (не ручное, а например auto_vehicle) — оставляем
     if explicit in QUANTITY_SOURCES:
         return explicit
+    
+    # 8. Фолбэк на реестр
     if reg:
         return reg.quantity_source
+    
+    # 9. Дефолты по скоупу
     if scope == "vehicle":
         return "manual_vehicle"
     if scope == "period":
