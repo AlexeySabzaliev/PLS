@@ -40,6 +40,9 @@
         `/api/uss/warehouse/shift?warehouse_id=${warehouseId}&date=${ctx.date}`
       );
 
+      // Рендерим статус дня и кнопки подтверждения/открытия
+      UssApi.renderDayStatusToolbar(toolbarEl, ctx, data.day_summary, role, setStatus, load);
+
       contentEl.innerHTML = '';
       if (!data.contracts?.length) {
         contentEl.innerHTML = '<p class="muted">На выбранную дату нет договоров с действующим ДС. Выберите другую дату или проверьте доп. соглашения.</p>';

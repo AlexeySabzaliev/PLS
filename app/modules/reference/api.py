@@ -1061,3 +1061,46 @@ def warehouse_staff_delete(item_id: int):
         db.session.rollback()
         return {"error": "not_found"}, 404
     return {"deleted": True, "id": item_id}
+
+
+@bp.post("/tariff/reorder")
+@login_required
+def tariff_reorder():
+    """Изменение порядка ставок в справочнике (Drag & Drop)."""
+    if not _check_ref_access("tariff_rules"):
+        return {"error": "forbidden"}, 403
+    
+    data = request.get_json(silent=True) or {}
+    src_id = data.get("src_id")
+    target_id = data.get("target_id")
+    
+    if not src_id or not target_id:
+        return {"error": "missing_ids", "message": "Не указаны ID строк"}, 400
+    
+    src_row = db.session.get(TariffRule, int(src_id))
+    target_row = db.session.get(TariffRule, int(target_id))
+    
+    if not src_row or not target_row:
+        return {"error": "not_found"}, 404
+    
+    # Получаем все ставки того же ДС
+    amendment_id = src_row.amendment_id
+    all_rows = TariffRule.query.filter_by(amendment_id=amendment_id).order_by(TariffRule.sort_order, TariffRule.id).all()
+    
+    # Находим индексы
+    src_idx = next((i for i, r in enumerate(all_rows) if r.id == src_row.id), None)
+    target_idx = next((i for i, r in enumerate(all_rows) if r.id == target_row.id), None)
+    
+    if src_idx is None or target_idx is None:
+        return {"error": "not_in_list"}, 400
+    
+    # Перемещаем элемент в списке
+    row_to_move = all_rows.pop(src_idx)
+    all_rows.insert(target_idx, row_to_move)
+    
+    # Обновляем sort_order для всех строк
+    for idx, row in enumerate(all_rows):
+        row.sort_order = idx * 10  # Шаг 10 для возможности вставки между элементами
+    
+    db.session.commit()
+    return {"success": True, "message": "Порядок обновлён"}
