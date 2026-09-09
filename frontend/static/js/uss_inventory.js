@@ -40,6 +40,9 @@
         `/api/uss/inventory/shift?warehouse_id=${warehouseId}&date=${ctx.date}`
       );
 
+      // Рендерим статус дня и кнопки подтверждения/открытия
+      UssApi.renderDayStatusToolbar(toolbarEl, ctx, data.day_summary, role, setStatus, load);
+
       contentEl.innerHTML = '';
       const areaAll = data.area_entries || {};
       const extraAll = data.extra_entries || {};

@@ -15,6 +15,7 @@ from app.modules.uss.services.shift_contracts import (
 )
 from app.modules.uss.services.operation_daily_totals import list_daily_totals, upsert_daily_totals
 from app.modules.uss.services.report_schema import schema_for_contract_role
+from app.modules.uss.services.shift_day_confirm import day_summary
 
 REPORT_ROLE = "warehouse_logistics"
 
@@ -54,6 +55,7 @@ def list_warehouse_shift(user: dict, warehouse_id: int, day: date) -> dict:
         "schemas": schemas,
         "daily_totals": {str(k): v for k, v in totals_by_contract.items()},
         "period_locks": {str(k): v for k, v in period_locks.items()},
+        "day_summary": day_summary(warehouse_id, day),
     }
 
 

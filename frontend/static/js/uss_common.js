@@ -791,4 +791,82 @@ const UssApi = {
     container.innerHTML = '';
     container.appendChild(form);
   },
+
+  async renderDayStatusToolbar(container, ctx, summary, role, setStatus, loadCallback) {
+    if (!container || !summary) return;
+    const toolbar = container.querySelector('.toolbar');
+    if (!toolbar) return;
+
+    // Очищаем старые кнопки статуса дня
+    toolbar.querySelector('.day-status-hint')?.remove();
+    toolbar.querySelector('#btn-open-day')?.remove();
+    toolbar.querySelector(`#btn-confirm-day-${role}`)?.remove();
+
+    const confirmedCount = Object.keys(summary.confirmed || {}).filter((k) => summary.confirmed[k]).length;
+    const totalRoles = summary.roles?.length || 3;
+
+    // Отображаем статус дня
+    const hint = document.createElement('span');
+    hint.className = 'day-status-hint muted';
+    hint.style.marginLeft = 'auto';
+    hint.style.marginRight = '10px';
+    hint.textContent = summary.fully_closed
+      ? `День закрыт: ${confirmedCount}/${totalRoles}`
+      : confirmedCount
+        ? `День открыт: подтверждено ${confirmedCount}/${totalRoles}`
+        : 'День открыт: подтверждений нет';
+    toolbar.appendChild(hint);
+
+    // Кнопка подтверждения для текущей роли
+    const isMyRoleConfirmed = summary.confirmed?.[role];
+    if (!summary.fully_closed && !isMyRoleConfirmed && ctx.date <= this.today()) {
+      const btnConfirm = document.createElement('button');
+      btnConfirm.type = 'button';
+      btnConfirm.id = `btn-confirm-day-${role}`;
+      btnConfirm.className = 'toolbar-btn btn-primary-sm';
+      btnConfirm.textContent = 'Подтвердить день';
+      btnConfirm.title = `Подтвердить отчёт за этот день (${role})`;
+      btnConfirm.addEventListener('click', async () => {
+        if (!window.confirm(`Подтвердить день отчётом? После этого изменения потребуют открытия дня коммерческой логистикой.`)) return;
+        try {
+          await this.json('/api/uss/day-confirm', {
+            method: 'POST',
+            body: JSON.stringify({ 
+              warehouse_id: Number(ctx.warehouse_id), 
+              report_date: ctx.date,
+              report_role: role
+            }),
+          });
+          setStatus('День подтверждён.');
+          loadCallback();
+        } catch (e) {
+          setStatus(e.message, true);
+        }
+      });
+      toolbar.appendChild(btnConfirm);
+    }
+
+    // Кнопка открытия дня (только для коммерческой логистики или админа)
+    if (!ctx.can_reopen_day || !confirmedCount) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'btn-open-day';
+    btn.className = 'toolbar-btn btn-primary-sm';
+    btn.textContent = 'Открыть день';
+    btn.title = 'Снять подтверждения дня для внесения правок';
+    btn.addEventListener('click', async () => {
+      if (!window.confirm('Открыть этот день для правок? Подтверждения будут сняты.')) return;
+      try {
+        await this.json('/api/uss/day-open', {
+          method: 'POST',
+          body: JSON.stringify({ warehouse_id: Number(ctx.warehouse_id), report_date: ctx.date }),
+        });
+        setStatus('День открыт для правок.');
+        loadCallback();
+      } catch (e) {
+        setStatus(e.message, true);
+      }
+    });
+    toolbar.appendChild(btn);
+  },
 };
