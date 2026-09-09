@@ -654,6 +654,62 @@ const UssApi = {
     parent.appendChild(el);
   },
 
+  /**
+   * Отрисовка кнопки подтверждения дня для роли
+   * @param {HTMLElement} container - контейнер для кнопки (toolbar)
+   * @param {string} role - текущая роль пользователя
+   * @param {object} daySummary - данные о статусе дня от API
+   * @param {Function} onConfirm - callback после успешного подтверждения
+   */
+  renderDayConfirmationButton(container, role, daySummary, onConfirm) {
+    const toolbar = container.querySelector('.toolbar');
+    if (!toolbar || !daySummary) return;
+
+    // Удаляем существующую кнопку подтверждения
+    toolbar.querySelector('#btn-confirm-day')?.remove();
+
+    // Проверяем, закрыт ли день полностью
+    if (daySummary.fully_closed) return;
+
+    // Проверяем, подтвердила ли текущая роль день
+    const roleConfirmed = daySummary.confirmed?.[role];
+    if (roleConfirmed) {
+      // Роль уже подтвердила день - показываем метку
+      const label = document.createElement('span');
+      label.id = 'btn-confirm-day';
+      label.className = 'day-confirmed-label muted';
+      label.textContent = '✓ Вы подтвердили этот день';
+      label.title = `Подтверждено ${new Date(roleConfirmed).toLocaleString('ru-RU')}`;
+      toolbar.appendChild(label);
+      return;
+    }
+
+    // День не закрыт и роль не подтвердила - показываем кнопку
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'btn-confirm-day';
+    btn.className = 'toolbar-btn btn-primary-sm';
+    btn.textContent = 'Подтвердить ввод данных за день';
+    btn.title = 'Подтвердите корректность введённых данных за этот день';
+    btn.addEventListener('click', async () => {
+      if (!window.confirm('Подтвердить ввод данных за этот день? После подтверждения правки будут недоступны.')) return;
+      try {
+        await this.json('/api/uss/day-confirm', {
+          method: 'POST',
+          body: JSON.stringify({
+            warehouse_id: daySummary.warehouse_id,
+            report_date: daySummary.report_date,
+            report_role: role,
+          }),
+        });
+        if (typeof onConfirm === 'function') onConfirm();
+      } catch (e) {
+        alert(e.message || 'Ошибка подтверждения');
+      }
+    });
+    toolbar.appendChild(btn);
+  },
+
   renderToolbar(container, { warehouses, warehouseId, date, role, minDate, maxDate, onChange }) {
     container.innerHTML = '';
     const bounds = this.defaultShiftDateBounds();

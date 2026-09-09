@@ -36,6 +36,14 @@
         },
       });
 
+      const daySummary = await UssApi.json(
+        `/api/uss/day-summary?warehouse_id=${warehouseId}&date=${ctx.date}`,
+      );
+      UssApi.renderDayConfirmationButton(toolbarEl, role, daySummary, () => {
+        setStatus('День подтверждён.');
+        load();
+      });
+
       const data = await UssApi.json(
         `/api/uss/warehouse/shift?warehouse_id=${warehouseId}&date=${ctx.date}`
       );
