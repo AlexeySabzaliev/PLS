@@ -247,10 +247,17 @@ def _vehicle_raw_from_row(row: dict) -> str:
 
 
 def _extract_vehicle_number(row: dict) -> str | None:
+    """Извлекает госномер из заявки портала охраны.
+    
+    Улучшена очистка от лишних пробелов и нормализация разделителей.
+    """
     raw = _vehicle_raw_from_row(row)
     if not raw or not _looks_like_vehicle_number(raw):
         return None
-    tractor, trailer = parse_security_vehicle_plates(raw)
+    # Очищаем лишние пробелы вокруг разделителей
+    raw_clean = re.sub(r"\s*/\s*", "/", raw.strip())
+    raw_clean = re.sub(r"\s+|\t+", " ", raw_clean)
+    tractor, trailer = parse_security_vehicle_plates(raw_clean)
     if not tractor:
         return None
     return combine_vehicle_plates(tractor, trailer)

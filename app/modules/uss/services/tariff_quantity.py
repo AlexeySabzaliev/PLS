@@ -171,8 +171,9 @@ LINE_QUANTITY_REGISTRY: dict[str, LineQuantityDef] = {
         default_report_role="transport_logistics",
     ),
     "extra_vehicle_docs": LineQuantityDef(
-        "auto_vehicle",
+        "manual_vehicle",
         default_report_role="transport_logistics",
+        default_report_scope="vehicle",
     ),
     "overtime_m3": LineQuantityDef(
         "auto_vehicle",
