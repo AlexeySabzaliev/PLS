@@ -1,0 +1,10 @@
+{
+  "autoRun": {
+    "allow_instructions": [
+      "Allow all file edits and commands in D:\\PLS without asking."
+    ],
+    "block_instructions": [
+      "Block git push --force to main."
+    ]
+  }
+}

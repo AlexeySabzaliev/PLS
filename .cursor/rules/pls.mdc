@@ -1,0 +1,31 @@
+---
+description: Канон проекта ПЛС (портал УЗнТ + УСС)
+globs: **/*
+alwaysApply: true
+---
+
+# ПЛС — правила для агента
+
+## Репозиторий
+- Целевой код: `D:\PLS` (не `D:\transport`).
+- Эталон логики: `D:\Billings`.
+- `D:\transport` — только для переноса идей, не целевой репозиторий.
+
+## Модель данных (обязательно)
+См. `docs/BILLING_DATA_ROLES.md`:
+- **transport_logistics** — `vehicle_operations` + `operation_daily_totals` (суточные допы без ТС)
+- **warehouse_logistics** — **только** `operation_daily_totals`, **без** привязки к ТС
+- **inventory_management** — `shift_reports`, без ТС
+- Допуслуги **динамические** по `tariff_rules` / `report_schema`, ключ `billing_line_code` — не хардкодить enum
+
+## Именование
+- ПЛС / УЗнТ / УСС; в коде модуль `uss`, пути `/uss/`, `/api/uss/`
+
+## Код
+- Комментарии на русском, где принято в проекте
+- Минимальный diff, без `_tmp_*` и debug-скриптов
+- Коммиты — только по явной просьбе пользователя
+- Перед коммитом: `pytest -v` в `D:\PLS`
+
+## SSO
+- Windows → email → роли в БД (`users`, `user_roles`)
