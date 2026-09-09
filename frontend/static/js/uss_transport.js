@@ -99,16 +99,46 @@
     if (!toolbar) return;
     toolbar.querySelector('.day-status-hint')?.remove();
     toolbar.querySelector('#btn-open-day')?.remove();
+    toolbar.querySelector('#btn-confirm-day')?.remove();
     if (!summary) return;
+    const confirmedCount = Object.keys(summary.confirmed || {}).filter((k) => summary.confirmed[k]).length;
     const hint = document.createElement('span');
     hint.className = 'day-status-hint muted';
-    const confirmedCount = Object.keys(summary.confirmed || {}).filter((k) => summary.confirmed[k]).length;
     hint.textContent = summary.fully_closed
       ? `День закрыт: ${confirmedCount}/${summary.roles?.length || 0}`
       : confirmedCount
         ? `День открыт: подтверждено ${confirmedCount}/${summary.roles?.length || 0}`
         : 'День открыт: подтверждений нет';
     toolbar.appendChild(hint);
+
+    // Кнопка подтверждения дня для транспортной логистики
+    const isMyRoleConfirmed = summary.confirmed?.['transport_logistics'];
+    if (!summary.fully_closed && !isMyRoleConfirmed && ctx.date <= UssApi.today()) {
+      const btnConfirm = document.createElement('button');
+      btnConfirm.type = 'button';
+      btnConfirm.id = 'btn-confirm-day';
+      btnConfirm.className = 'toolbar-btn btn-primary-sm';
+      btnConfirm.textContent = 'Подтвердить день';
+      btnConfirm.title = 'Подтвердить отчёт транспортной логистики за этот день';
+      btnConfirm.addEventListener('click', async () => {
+        if (!window.confirm('Подтвердить день отчётом транспортной логистики? После этого изменения потребуют открытия дня коммерческой логистикой.')) return;
+        try {
+          await UssApi.json('/api/uss/day-confirm', {
+            method: 'POST',
+            body: JSON.stringify({ 
+              warehouse_id: Number(ctx.warehouse_id), 
+              report_date: ctx.date,
+              report_role: 'transport_logistics'
+            }),
+          });
+          setStatus('День подтверждён.');
+          load();
+        } catch (e) {
+          setStatus(e.message, true);
+        }
+      });
+      toolbar.appendChild(btnConfirm);
+    }
 
     if (!ctx.can_reopen_day || !confirmedCount) return;
     const btn = document.createElement('button');
