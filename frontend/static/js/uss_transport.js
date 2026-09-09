@@ -110,12 +110,6 @@
         : 'День открыт: подтверждений нет';
     toolbar.appendChild(hint);
 
-    // Вызываем единую функцию отрисовки кнопки подтверждения дня
-    UssApi.renderDayConfirmationButton(toolbarHost, role, summary, () => {
-      setStatus('День подтверждён.');
-      load();
-    });
-
     if (!ctx.can_reopen_day || !confirmedCount) return;
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -439,6 +433,10 @@
         `/api/uss/day-summary?warehouse_id=${warehouseId}&date=${ctx.date}`,
       );
       renderDayStatus(toolbarEl, ctx, daySummary);
+      UssApi.renderDayConfirmationButton(toolbarEl, role, daySummary, () => {
+        setStatus('День подтверждён.');
+        load();
+      });
       renderSecurityHint(toolbarEl, ctx.security, ctx.security_visit_place);
 
       const data = await UssApi.json(

@@ -952,6 +952,23 @@ body {
   margin-left: 0.5rem;
 }
 
+.day-confirmed-label {
+  margin-left: 0.5rem;
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+.btn-primary-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  background: #1976d2;
+  border-color: #1976d2;
+}
+
+.btn-primary-sm:hover {
+  background: #1565c0;
+}
+
 .field-row {
   display: grid;
   grid-template-columns: 1fr 120px;
