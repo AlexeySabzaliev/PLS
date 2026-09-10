@@ -102,6 +102,7 @@ class BillingCalculator:
             contract, year, month, tariffs, operations, shifts,
             period_start=period_start,
             period_end=period_end,
+            is_final=False,  # Предварительный биллинг - считаем только до текущей даты
         )
         total = sum((line.amount_ex_vat for line in lines), Decimal("0"))
         by_code = {line.line_code: billing_line_to_dict(line) for line in lines}

@@ -27,12 +27,12 @@ def day_summary(warehouse_id: int, report_date: date) -> dict:
         warehouse_id=warehouse_id,
         report_date=report_date,
     ).all()
-    # Инициализируем все роли как неподтвержденные
-    confirmed = {role: None for role in ALL_ROLES}
+    # Инициализируем все роли как неподтвержденные (false)
+    confirmed = {role: False for role in ALL_ROLES}
     # Обновляем подтвержденные роли
     for r in rows:
         if r.confirmed_at:
-            confirmed[r.report_role] = r.confirmed_at.isoformat()
+            confirmed[r.report_role] = True
     fully_closed = is_day_confirmed(warehouse_id, report_date)
     return {
         "warehouse_id": warehouse_id,

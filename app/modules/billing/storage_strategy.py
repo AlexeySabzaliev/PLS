@@ -313,7 +313,7 @@ def _build_billing_quantity_context(
     # Для предварительного биллинга ограничиваем период текущей датой
     limit_to_today = not is_final
     daily_totals = sum_daily_totals_by_code(contract["id"], period_start, period_end, limit_to_today=limit_to_today)
-    vehicle_qty = sum_vehicle_report_quantities(operations, period_start, period_end)
+    vehicle_qty = sum_vehicle_report_quantities(operations, period_start, period_end, limit_to_today=limit_to_today)
     extra_totals = _sum_extra_entries(shifts, period_start, period_end)
     reserved_m2 = _contract_reserved_area_m2(contract, period_end)
     return daily_totals, vehicle_qty, extra_totals, reserved_m2

@@ -874,7 +874,7 @@ const UssApi = {
     toolbar.appendChild(hint);
 
     // Кнопка подтверждения для текущей роли (унифицированный текст)
-    const isMyRoleConfirmed = summary.confirmed?.[role];
+    const isMyRoleConfirmed = summary.confirmed?.[role] === true;
     if (!summary.fully_closed && !isMyRoleConfirmed && ctx.date <= this.today()) {
       const btnConfirm = document.createElement('button');
       btnConfirm.type = 'button';
@@ -900,6 +900,13 @@ const UssApi = {
         }
       });
       toolbar.appendChild(btnConfirm);
+    } else if (isMyRoleConfirmed) {
+      // Метка "Вы подтвердили"
+      const confirmedBadge = document.createElement('span');
+      confirmedBadge.className = 'muted';
+      confirmedBadge.style.marginLeft = '10px';
+      confirmedBadge.textContent = '✓ Вы подтвердили';
+      toolbar.appendChild(confirmedBadge);
     }
 
     // Кнопка открытия дня (только для коммерческой логистики или админа)

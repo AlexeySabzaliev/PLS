@@ -78,13 +78,29 @@ def sum_vehicle_report_quantities(
     operations: list[dict],
     period_start: date,
     period_end: date,
+    *,
+    limit_to_today: bool = False,
 ) -> dict[str, Decimal]:
+    """Агрегация операций ТС.
+    
+    Args:
+        limit_to_today: Если True, ограничивает период текущей датой (для предварительного биллинга)
+    """
+    from datetime import date as dt_date
+    
+    # Для предварительного биллинга ограничиваем период текущей датой
+    effective_end = period_end
+    if limit_to_today:
+        today = dt_date.today()
+        if period_end > today:
+            effective_end = today
+    
     totals: dict[str, Decimal] = {}
     for op in operations:
         od = op.get("operation_date")
         if isinstance(od, str):
             od = date.fromisoformat(od[:10])
-        if not (period_start <= od <= period_end):
+        if not (period_start <= od <= effective_end):
             continue
         for code, raw in _parse_json_obj(op.get("report_quantities")).items():
             if not code:
