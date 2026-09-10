@@ -164,7 +164,12 @@ def inventory_shift_post():
 def get_day_summary():
     wh = request.args.get("warehouse_id", type=int)
     day = date.fromisoformat(request.args.get("date", date.today().isoformat()))
-    return day_summary(wh, day)
+    from app.modules.uss.services.warehouse_schedule import warehouse_shift_hours
+    shift_start, shift_end = warehouse_shift_hours(wh)
+    result = day_summary(wh, day)
+    result["shift_start_time"] = shift_start.strftime("%H:%M")
+    result["shift_end_time"] = shift_end.strftime("%H:%M")
+    return result
 
 
 @bp.post("/day-confirm")
