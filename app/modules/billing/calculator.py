@@ -34,7 +34,9 @@ def load_contract_dict(contract_id: int) -> dict | None:
 
 
 def load_shifts(warehouse_id: int, period_start: date, period_end: date) -> list[dict]:
-    """Складские отчёты — без фильтрации по дням, чтобы не терять данные."""
+    """Складские отчёты с информацией о подтверждении дня."""
+    from app.modules.uss.services.shift_day_confirm import day_summary
+    
     rows = (
         ShiftReport.query.filter(
             ShiftReport.warehouse_id == warehouse_id,
@@ -44,14 +46,18 @@ def load_shifts(warehouse_id: int, period_start: date, period_end: date) -> list
         .order_by(ShiftReport.report_date)
         .all()
     )
-    return [
-        {
+    result = []
+    for r in rows:
+        summary = day_summary(warehouse_id, r.report_date)
+        result.append({
             "report_date": r.report_date,
             "area_entries": r.area_entries or {},
             "extra_entries": r.extra_entries or {},
-        }
-        for r in rows
-    ]
+            "is_confirmed": summary["is_confirmed"],
+            "confirmed_count": sum(1 for v in summary["confirmed"].values() if v),
+            "total_roles": len(summary["roles"]),
+        })
+    return result
 
 
 class BillingCalculator:
