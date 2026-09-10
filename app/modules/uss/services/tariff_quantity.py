@@ -797,6 +797,8 @@ def resolve_tariff_period_quantity(
         return qty
 
     if source == "manual_daily":
+        # Для manual_daily берем сумму за все дни периода
+        # daily_totals уже содержит агрегированные данные по периоду
         qty = daily_totals.get(code, Decimal("0"))
         if bill_code != code:
             qty += daily_totals.get(bill_code, Decimal("0"))

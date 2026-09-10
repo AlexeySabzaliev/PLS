@@ -301,10 +301,19 @@ def _build_billing_quantity_context(
     period_end: date,
     operations: list[dict],
     shifts: list[dict],
+    *,
+    is_final: bool = False,
 ) -> tuple[dict[str, Decimal], dict[str, Decimal], dict[str, Decimal], Decimal]:
-    """Контекст количеств для resolve_tariff_period_quantity."""
-    daily_totals = sum_daily_totals_by_code(contract["id"], period_start, period_end)
-    vehicle_qty = sum_vehicle_report_quantities(operations, period_start, period_end)
+    """Контекст количеств для resolve_tariff_period_quantity.
+    
+    Args:
+        is_final: Если True, используется для финального биллинга (берем все дни периода).
+                  Если False, для предварительного биллинга (ограничиваем текущей датой).
+    """
+    # Для предварительного биллинга ограничиваем период текущей датой
+    limit_to_today = not is_final
+    daily_totals = sum_daily_totals_by_code(contract["id"], period_start, period_end, limit_to_today=limit_to_today)
+    vehicle_qty = sum_vehicle_report_quantities(operations, period_start, period_end, limit_to_today=limit_to_today)
     extra_totals = _sum_extra_entries(shifts, period_start, period_end)
     reserved_m2 = _contract_reserved_area_m2(contract, period_end)
     return daily_totals, vehicle_qty, extra_totals, reserved_m2
@@ -390,8 +399,15 @@ class StorageBillingStrategy:
         snapshots: list[dict] | None = None,
         period_start: date | None = None,
         period_end: date | None = None,
+        is_final: bool = False,
         **_kwargs,
     ) -> list[BillingLineResult]:
+        """Расчет биллинга.
+        
+        Args:
+            is_final: Если True, расчет для финального биллинга (все дни периода).
+                      Если False, для предварительного биллинга (дни ограничены текущей датой).
+        """
         snapshots = snapshots or []
         if period_start is None or period_end is None:
             period_start, period_end = _month_bounds(year, month)
@@ -401,7 +417,7 @@ class StorageBillingStrategy:
         area_mode = config.get("area_mode", "two_tier")
 
         daily_totals, vehicle_qty, extra_totals, reserved_m2 = _build_billing_quantity_context(
-            contract, period_start, period_end, operations, shifts,
+            contract, period_start, period_end, operations, shifts, is_final=is_final,
         )
         qty_ctx = {
             "operations": operations,

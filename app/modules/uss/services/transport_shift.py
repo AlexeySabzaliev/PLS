@@ -244,6 +244,8 @@ def _dedupe_vehicle_rows(vehicles: list[VehicleOperation]) -> list[VehicleOperat
 
 
 def list_transport_shift(user: dict, warehouse_id: int, day: date) -> dict:
+    from app.modules.uss.services.shift_day_confirm import day_summary as get_day_summary
+    
     wh_ids = user.get("warehouse_ids") or []
     if warehouse_id not in wh_ids and not user.get("is_admin"):
         return {"error": "forbidden"}
@@ -284,6 +286,11 @@ def list_transport_shift(user: dict, warehouse_id: int, day: date) -> dict:
     period_locks = periods_status_for_contracts(contract_ids, day.year, day.month)
     min_date, max_date = shift_date_bounds()
     wh = db.session.get(Warehouse, warehouse_id) if warehouse_id else None
+    
+    # Получаем время начала и окончания смены для уведомлений
+    from app.modules.uss.services.warehouse_schedule import warehouse_shift_hours
+    shift_start, shift_end = warehouse_shift_hours(warehouse_id)
+    
     return {
         "warehouse_id": warehouse_id,
         "operation_date": day.isoformat(),
@@ -299,6 +306,9 @@ def list_transport_shift(user: dict, warehouse_id: int, day: date) -> dict:
         "security": security_status(),
         "security_visit_place": wh.security_visit_place if wh else None,
         "vehicles": [_serialize_vehicle(v, wb_map) for v in vehicles],
+        "day_summary": get_day_summary(warehouse_id, day),
+        "shift_start_time": shift_start.strftime("%H:%M"),
+        "shift_end_time": shift_end.strftime("%H:%M"),
     }
 
 

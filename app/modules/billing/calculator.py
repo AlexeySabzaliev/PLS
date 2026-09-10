@@ -53,11 +53,10 @@ def load_shifts(warehouse_id: int, period_start: date, period_end: date) -> list
             "report_date": r.report_date,
             "area_entries": r.area_entries or {},
             "extra_entries": r.extra_entries or {},
-            "is_confirmed": summary["is_confirmed"],
-            "confirmed_count": sum(1 for v in summary["confirmed"].values() if v),
-            "total_roles": len(summary["roles"]),
-        })
-    return result
+            "is_day_confirmed": is_day_confirmed(warehouse_id, r.report_date),
+        }
+        for r in rows
+    ]
 
 
 class BillingCalculator:
@@ -107,6 +106,7 @@ class BillingCalculator:
             contract, year, month, tariffs, operations, shifts,
             period_start=period_start,
             period_end=period_end,
+            is_final=False,  # Предварительный биллинг - считаем только до текущей даты
         )
         total = sum((line.amount_ex_vat for line in lines), Decimal("0"))
         by_code = {line.line_code: billing_line_to_dict(line) for line in lines}

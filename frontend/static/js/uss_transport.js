@@ -97,45 +97,10 @@
   function renderDayStatus(toolbarHost, ctx, summary) {
     const toolbar = toolbarHost.querySelector('.toolbar');
     if (!toolbar) return;
-    toolbar.querySelector('.day-status-hint')?.remove();
-    toolbar.querySelector('#btn-open-day')?.remove();
-    toolbar.querySelector('#btn-confirm-day')?.remove();
-    if (!summary) return;
-    const confirmedCount = Object.keys(summary.confirmed || {}).filter((k) => summary.confirmed[k]).length;
-    const hint = document.createElement('span');
-    hint.className = 'day-status-hint muted';
-    hint.textContent = summary.fully_closed
-      ? `День закрыт: ${confirmedCount}/${summary.roles?.length || 0}`
-      : confirmedCount
-        ? `День открыт: подтверждено ${confirmedCount}/${summary.roles?.length || 0}`
-        : 'День открыт: подтверждений нет';
-    toolbar.appendChild(hint);
-
-    // Вызываем общую функцию рендеринга кнопок подтверждения из uss_common.js
+    
+    // Вызываем общую функцию рендеринга статуса дня и кнопок из uss_common.js
     // Это обеспечит единый текст и расположение кнопки для всех ролей
     UssApi.renderDayStatusToolbar(toolbar, ctx, summary, 'transport_logistics', setStatus, load);
-
-    if (!ctx.can_reopen_day || !confirmedCount) return;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'btn-open-day';
-    btn.className = 'toolbar-btn btn-primary-sm';
-    btn.textContent = 'Открыть день';
-    btn.title = 'Снять подтверждения дня для внесения правок';
-    btn.addEventListener('click', async () => {
-      if (!window.confirm('Открыть этот день для правок? Подтверждения будут сняты.')) return;
-      try {
-        await UssApi.json('/api/uss/day-open', {
-          method: 'POST',
-          body: JSON.stringify({ warehouse_id: Number(ctx.warehouse_id), report_date: ctx.date }),
-        });
-        setStatus('День открыт для правок.');
-        load();
-      } catch (e) {
-        setStatus(e.message, true);
-      }
-    });
-    toolbar.appendChild(btn);
   }
 
   function fieldValue(vehicle, fieldDef) {

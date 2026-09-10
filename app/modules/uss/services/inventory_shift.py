@@ -21,6 +21,8 @@ REPORT_ROLE = "inventory_management"
 
 
 def get_inventory_shift(user: dict, warehouse_id: int, day: date) -> dict:
+    from app.modules.uss.services.shift_day_confirm import day_summary as get_day_summary
+    
     wh_ids = user.get("warehouse_ids") or []
     if warehouse_id not in wh_ids and not user.get("is_admin"):
         return {"error": "forbidden"}
@@ -43,6 +45,11 @@ def get_inventory_shift(user: dict, warehouse_id: int, day: date) -> dict:
     period_locks = periods_status_for_contracts(contract_ids, day.year, day.month)
     warehouse_locked = any(p.get("locked") for p in period_locks.values())
     min_date, max_date = shift_date_bounds()
+    
+    # Получаем время начала и окончания смены для уведомлений
+    from app.modules.uss.services.warehouse_schedule import warehouse_shift_hours
+    shift_start, shift_end = warehouse_shift_hours(warehouse_id)
+    
     return {
         "warehouse_id": warehouse_id,
         "report_date": day.isoformat(),
@@ -56,6 +63,9 @@ def get_inventory_shift(user: dict, warehouse_id: int, day: date) -> dict:
         "extra_entries": (row.extra_entries if row else {}) or {},
         "period_locks": {str(k): v for k, v in period_locks.items()},
         "warehouse_locked": warehouse_locked,
+        "day_summary": get_day_summary(warehouse_id, day),
+        "shift_start_time": shift_start.strftime("%H:%M"),
+        "shift_end_time": shift_end.strftime("%H:%M"),
     }
 
 

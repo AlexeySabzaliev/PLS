@@ -1,3 +1,1 @@
-```
-PLS_temp/
-```
+Nothing should be ignored in this case, as only a source code file (`app/modules/uss/api.py`) was modified and there are no build artifacts, dependencies, or temporary files in the changes.

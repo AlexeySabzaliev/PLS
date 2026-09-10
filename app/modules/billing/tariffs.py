@@ -79,14 +79,12 @@ def _serialize_tariff_rows(rows: list[TariffRule]) -> list[dict]:
     } if unit_ids else {}
 
     out: list[dict] = []
-    seen: set[str] = set()
+    # Убрана проверка seen - теперь все ставки из ДС попадают в биллинг
+    # Даже если billing_line_code повторяется (например, разные тарифы для одного кода)
     for row in rows:
         code = row.billing_line_code
         if is_placeholder_code(code):
             code = infer_billing_line_code(row.name or "", code)
-        if code in seen:
-            continue
-        seen.add(code)
         item = apply_tariff_defaults({
             "id": row.id,
             "billing_line_code": code,

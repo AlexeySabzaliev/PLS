@@ -811,9 +811,55 @@ const UssApi = {
     toolbar.querySelector('.day-status-hint')?.remove();
     toolbar.querySelector('#btn-open-day')?.remove();
     toolbar.querySelector(`#btn-confirm-day-${role}`)?.remove();
+    toolbar.querySelector('.shift-warning-banner')?.remove();
 
     const confirmedCount = Object.keys(summary.confirmed || {}).filter((k) => summary.confirmed[k]).length;
     const totalRoles = summary.roles?.length || 3;
+
+    // Проверка уведомлений о смене
+    const now = new Date();
+    const currentTime = now.toTimeString().slice(0, 5);
+    const reportDate = summary.report_date;
+    
+    // Получаем время окончания смены из контекста
+    const shiftEnd = ctx.shift_end_time || '17:30';
+    const shiftStart = ctx.shift_start_time || '09:00';
+    
+    // Вычисляем время за 1 час до конца смены
+    const [endHours, endMinutes] = shiftEnd.split(':').map(Number);
+    const warningTime = new Date();
+    warningTime.setHours(endHours - 1, endMinutes, 0, 0);
+    const warningTimeStr = warningTime.toTimeString().slice(0, 5);
+    
+    // Проверяем, является ли текущий день рабочим (не выходной)
+    const reportDateObj = new Date(reportDate + 'T12:00:00');
+    const isWeekend = reportDateObj.getDay() === 0 || reportDateObj.getDay() === 6;
+    
+    // Отображаем предупреждения только если смена еще не закрыта
+    if (!summary.fully_closed && !isWeekend) {
+      const warningBanner = document.createElement('div');
+      warningBanner.className = 'shift-warning-banner';
+      warningBanner.style.padding = '8px 12px';
+      warningBanner.style.marginBottom = '10px';
+      warningBanner.style.borderRadius = '4px';
+      
+      // Желтое предупреждение за 1 час до конца смены
+      if (currentTime >= warningTimeStr && currentTime < shiftEnd && reportDate === this.today()) {
+        warningBanner.style.backgroundColor = '#fff3cd';
+        warningBanner.style.border = '1px solid #ffc107';
+        warningBanner.style.color = '#856404';
+        warningBanner.textContent = '⚠️ До конца смены менее 1 часа! Не забудьте подтвердить день.';
+        toolbar.insertBefore(warningBanner, toolbar.firstChild);
+      }
+      // Красное предупреждение после окончания смены
+      else if (currentTime >= shiftEnd && reportDate === this.today()) {
+        warningBanner.style.backgroundColor = '#f8d7da';
+        warningBanner.style.border = '1px solid #dc3545';
+        warningBanner.style.color = '#721c24';
+        warningBanner.textContent = '🔴 Смена окончена по графику, но день не закрыт! Требуется вмешательство коммерческой логистики.';
+        toolbar.insertBefore(warningBanner, toolbar.firstChild);
+      }
+    }
 
     // Отображаем статус дня
     const hint = document.createElement('span');
@@ -828,7 +874,7 @@ const UssApi = {
     toolbar.appendChild(hint);
 
     // Кнопка подтверждения для текущей роли (унифицированный текст)
-    const isMyRoleConfirmed = summary.confirmed?.[role];
+    const isMyRoleConfirmed = summary.confirmed?.[role] === true;
     if (!summary.fully_closed && !isMyRoleConfirmed && ctx.date <= this.today()) {
       const btnConfirm = document.createElement('button');
       btnConfirm.type = 'button';
@@ -854,6 +900,13 @@ const UssApi = {
         }
       });
       toolbar.appendChild(btnConfirm);
+    } else if (isMyRoleConfirmed) {
+      // Метка "Вы подтвердили"
+      const confirmedBadge = document.createElement('span');
+      confirmedBadge.className = 'muted';
+      confirmedBadge.style.marginLeft = '10px';
+      confirmedBadge.textContent = '✓ Вы подтвердили';
+      toolbar.appendChild(confirmedBadge);
     }
 
     // Кнопка открытия дня (только для коммерческой логистики или админа)
