@@ -34,11 +34,30 @@ def sum_daily_totals_by_code(
     contract_id: int,
     period_start: date,
     period_end: date,
+    *,
+    limit_to_today: bool = False,
 ) -> dict[str, Decimal]:
+    """Агрегация суточных итогов по кодам биллинга.
+    
+    Args:
+        contract_id: ID договора
+        period_start: Начало периода
+        period_end: Конец периода
+        limit_to_today: Если True, ограничивает период текущей датой (для предварительного биллинга)
+    """
     from flask import has_app_context
-
+    
     if not has_app_context():
         return {}
+    
+    # Для предварительного биллинга ограничиваем период текущей датой
+    effective_end = period_end
+    if limit_to_today:
+        from datetime import date as dt_date
+        today = dt_date.today()
+        if period_end > today:
+            effective_end = today
+    
     rows = (
         db.session.query(
             OperationDailyTotal.billing_line_code,
@@ -47,7 +66,7 @@ def sum_daily_totals_by_code(
         .filter(
             OperationDailyTotal.contract_id == contract_id,
             OperationDailyTotal.report_date >= period_start,
-            OperationDailyTotal.report_date <= period_end,
+            OperationDailyTotal.report_date <= effective_end,
         )
         .group_by(OperationDailyTotal.billing_line_code)
         .all()
