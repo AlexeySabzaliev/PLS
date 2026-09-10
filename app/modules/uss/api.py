@@ -228,6 +228,7 @@ def shift_context():
         serialize_contracts,
         shift_date_bounds,
     )
+    from app.modules.uss.services.warehouse_schedule import warehouse_shift_hours
 
     role = request.args.get("role", "transport_logistics")
     wh_id = request.args.get("warehouse_id", type=int)
@@ -256,6 +257,10 @@ def shift_context():
     wh = db.session.get(Warehouse, wh_id)
     min_date, max_date = shift_date_bounds()
     role_codes = effective_role_codes(g.user)
+    
+    # Получаем время начала и окончания смены для уведомлений
+    shift_start, shift_end = warehouse_shift_hours(wh_id)
+    
     return {
         "role": role,
         "date": day.isoformat(),
@@ -268,6 +273,8 @@ def shift_context():
         "security": security_status(),
         "security_visit_place": wh.security_visit_place if wh else None,
         "can_reopen_day": bool(g.user.get("is_admin") or "commercial_logistics" in role_codes),
+        "shift_start_time": shift_start.strftime("%H:%M"),
+        "shift_end_time": shift_end.strftime("%H:%M"),
     }
 
 
