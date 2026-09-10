@@ -54,9 +54,8 @@ def load_shifts(warehouse_id: int, period_start: date, period_end: date) -> list
             "area_entries": r.area_entries or {},
             "extra_entries": r.extra_entries or {},
             "is_day_confirmed": is_day_confirmed(warehouse_id, r.report_date),
-        }
-        for r in rows
-    ]
+        })
+    return result
 
 
 class BillingCalculator:
