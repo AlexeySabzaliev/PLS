@@ -1085,6 +1085,11 @@ def tariff_reorder():
     
     # Получаем все ставки того же ДС
     amendment_id = src_row.amendment_id
+    if (target_row.amendment_id or 0) != (amendment_id or 0):
+        return {
+            "error": "different_amendments",
+            "message": "Перетаскивание возможно только между строками одного ДС/раздела",
+        }, 400
     all_rows = TariffRule.query.filter_by(amendment_id=amendment_id).order_by(TariffRule.sort_order, TariffRule.id).all()
     
     # Находим индексы

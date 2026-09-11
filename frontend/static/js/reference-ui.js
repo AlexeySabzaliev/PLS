@@ -1732,66 +1732,76 @@
     }
   }
 
+  // После успешного переноса строки на сервере — перезагружаем таблицу ставок.
+  document.addEventListener('ref-tariff-reordered', () => {
+    if (current === 'tariff_rules') selectCatalog(current);
+  });
+
   init();
 })();
 
-// Drag & Drop для сортировки ставок в справочнике
+// Drag & Drop для сортировки строк ставок в справочнике.
+// Обработчики делегируются на document — переживают перерисовку таблицы.
 (function initTariffDragDrop() {
-  let dragSrcEl = null;
+  const ROW_SELECTOR = '.ref-tariff-table tbody tr[data-id]';
+  let dragSrcRow = null;
 
-  function addDragAndDropHandlers() {
-    const rows = document.querySelectorAll('.ref-tariff-table tr[draggable="true"]');
-    rows.forEach(row => {
-      row.addEventListener('dragstart', handleDragStart);
-      row.addEventListener('dragover', handleDragOver);
-      row.addEventListener('drop', handleDrop);
-      row.addEventListener('dragend', handleDragEnd);
-    });
+  function tariffRowFromEvent(e) {
+    if (!e.target || typeof e.target.closest !== 'function') return null;
+    return e.target.closest(ROW_SELECTOR);
   }
 
-  function handleDragStart(e) {
-    dragSrcEl = this;
+  document.addEventListener('dragstart', (e) => {
+    const row = tariffRowFromEvent(e);
+    if (!row) return;
+    dragSrcRow = row;
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', this.dataset.id);
-    this.classList.add('dragging');
-  }
+    try {
+      e.dataTransfer.setData('text/plain', String(row.dataset.id));
+    } catch (_) { /* old browsers */ }
+    row.classList.add('dragging');
+  });
 
-  function handleDragOver(e) {
-    if (e.preventDefault) e.preventDefault();
+  document.addEventListener('dragover', (e) => {
+    if (!dragSrcRow) return;
+    const row = tariffRowFromEvent(e);
+    if (!row || row === dragSrcRow) return;
+    e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    return false;
-  }
+  });
 
-  function handleDrop(e) {
-    if (e.stopPropagation) e.stopPropagation();
-    const targetRow = this.closest('tr');
-    if (dragSrcEl !== targetRow) {
-      const srcId = dragSrcEl.dataset.id;
-      const targetId = targetRow.dataset.id;
-      if (srcId && targetId) {
-        reorderTariffRows(srcId, targetId);
-      }
+  document.addEventListener('drop', (e) => {
+    if (!dragSrcRow) return;
+    const targetRow = tariffRowFromEvent(e);
+    const srcRow = dragSrcRow;
+    dragSrcRow.classList.remove('dragging');
+    dragSrcRow = null;
+    if (!targetRow || targetRow === srcRow) return;
+    e.preventDefault();
+    const srcId = srcRow.dataset.id;
+    const targetId = targetRow.dataset.id;
+    if (srcId && targetId) {
+      reorderTariffRows(srcId, targetId);
     }
-    return false;
-  }
+  });
 
-  function handleDragEnd() {
-    this.classList.remove('dragging');
-    dragSrcEl = null;
-  }
+  document.addEventListener('dragend', () => {
+    if (dragSrcRow) dragSrcRow.classList.remove('dragging');
+    dragSrcRow = null;
+  });
 
   async function reorderTariffRows(srcId, targetId) {
     const statusEl = document.getElementById('status');
     try {
-      const response = await fetch('/api/tariff/reorder', {
+      const response = await fetch('/api/reference/tariff/reorder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ src_id: srcId, target_id: targetId })
+        body: JSON.stringify({ src_id: Number(srcId), target_id: Number(targetId) }),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message || data.error || 'HTTP ' + response.status);
-      await selectCatalog(current);
+      document.dispatchEvent(new CustomEvent('ref-tariff-reordered'));
       if (statusEl) {
         statusEl.textContent = 'Порядок ставок обновлён';
         statusEl.className = 'status';
@@ -1803,8 +1813,4 @@
       }
     }
   }
-
-  setTimeout(() => {
-    addDragAndDropHandlers();
-  }, 1000);
 })();

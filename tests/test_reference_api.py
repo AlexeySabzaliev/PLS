@@ -348,3 +348,50 @@ def test_warehouse_partial_update_preserves_security_visit_place(auth_client, cl
     )
     assert clear.status_code == 200
     assert clear.json["security_visit_place"] is None
+
+
+def test_tariff_reorder_changes_order_in_amendment(auth_client, client):
+    """Порядок строк ставок в справочнике меняется через /tariff/reorder."""
+    auth_client("admin@test.local", "admin")
+    tariffs = client.get("/api/reference/tariff_rules").json["items"]
+    assert tariffs
+    amendment_id = tariffs[0]["amendment_id"]
+    group = [
+        t for t in tariffs
+        if t["amendment_id"] == amendment_id and t["is_custom"] == tariffs[0]["is_custom"]
+    ]
+    assert len(group) >= 2, "в тестовой БД нужен ДС минимум с двумя ставками"
+    first, second = group[0], group[1]
+
+    resp = client.post(
+        "/api/reference/tariff/reorder",
+        json={"src_id": second["id"], "target_id": first["id"]},
+    )
+    assert resp.status_code == 200
+
+    after = client.get("/api/reference/tariff_rules").json["items"]
+    after_group = [
+        t for t in after
+        if t["amendment_id"] == amendment_id and t["is_custom"] == tariffs[0]["is_custom"]
+    ]
+    assert after_group[0]["id"] == second["id"]
+    assert after_group[1]["id"] == first["id"]
+    assert after_group[0]["sort_order"] < after_group[1]["sort_order"]
+
+
+def test_tariff_reorder_rejects_different_amendments(auth_client, client):
+    """Перенос между строками разных ДС запрещён."""
+    auth_client("admin@test.local", "admin")
+    tariffs = client.get("/api/reference/tariff_rules").json["items"]
+    am_ids = sorted({t["amendment_id"] for t in tariffs if t["amendment_id"]})
+    if len(am_ids) < 2:
+        import pytest
+        pytest.skip("в тестовой БД только один ДС")
+    a = next(t for t in tariffs if t["amendment_id"] == am_ids[0])
+    b = next(t for t in tariffs if t["amendment_id"] == am_ids[1])
+    resp = client.post(
+        "/api/reference/tariff/reorder",
+        json={"src_id": a["id"], "target_id": b["id"]},
+    )
+    assert resp.status_code == 400
+    assert resp.json["error"] == "different_amendments"

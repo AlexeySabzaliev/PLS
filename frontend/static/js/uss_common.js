@@ -804,7 +804,11 @@ const UssApi = {
 
   async renderDayStatusToolbar(container, ctx, summary, role, setStatus, loadCallback) {
     if (!container || !summary) return;
-    const toolbar = container.querySelector('.toolbar');
+    // Допускаем и контейнер-обёртку (#toolbar), и сам элемент .toolbar —
+    // страница транспорта передаёт внутренний .toolbar напрямую.
+    const toolbar = container.classList?.contains('toolbar')
+      ? container
+      : container.querySelector('.toolbar');
     if (!toolbar) return;
 
     // Очищаем старые кнопки статуса дня

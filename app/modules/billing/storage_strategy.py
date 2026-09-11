@@ -53,6 +53,21 @@ def _month_bounds(year: int, month: int) -> tuple[date, date]:
     return date(year, month, 1), date(year, month, last)
 
 
+def _billing_end(period_start: date, period_end: date, is_final: bool) -> date:
+    """Дата окончания начисления: предварительный биллинг считается на текущий момент.
+
+    Для закрытых/прошедших периодов (is_final или today >= period_end) — весь период.
+    """
+    if is_final:
+        return period_end
+    today = date.today()
+    return period_end if period_end <= today else today
+
+
+def _billing_days(period_start: date, billing_end: date) -> int:
+    return max((billing_end - period_start).days + 1, 0)
+
+
 def _tariff_on(tariffs: list[dict], line_code: str, on_date: date) -> dict | None:
     matched: list[dict] = []
     for t in tariffs:
@@ -252,6 +267,18 @@ def _parse_area_entries(shift: dict) -> list[dict]:
     return _parse_json_list(shift.get("area_entries"))
 
 
+def _shift_snapshot_date(snap: dict) -> date | None:
+    sd = snap.get("snapshot_date")
+    if sd is None:
+        return None
+    if isinstance(sd, date):
+        return sd
+    try:
+        return date.fromisoformat(str(sd)[:10])
+    except ValueError:
+        return None
+
+
 def _avg_extra_area_m2(
     shifts: list[dict],
     period_start: date,
@@ -259,7 +286,7 @@ def _avg_extra_area_m2(
     calendar_days: int,
 ) -> Decimal:
     """Средняя доп. площадь (м²/сут) за месяц по отчётам упр. запасами."""
-    from app.services.tariff_quantity import avg_inventory_area_m2
+    from app.modules.uss.services.tariff_quantity import avg_inventory_area_m2
 
     return avg_inventory_area_m2(
         shifts, period_start, period_end, calendar_days, "storage_area_extra",
@@ -298,24 +325,24 @@ TARIFF_SEGMENT_DETAIL_CODES = frozenset({"storage_area_extra"})
 def _build_billing_quantity_context(
     contract: dict,
     period_start: date,
-    period_end: date,
+    billing_end: date,
     operations: list[dict],
     shifts: list[dict],
     *,
     is_final: bool = False,
 ) -> tuple[dict[str, Decimal], dict[str, Decimal], dict[str, Decimal], Decimal]:
     """Контекст количеств для resolve_tariff_period_quantity.
-    
+
     Args:
+        billing_end: конец начисляемого отрезка (для предварительного биллинга — текущая дата).
         is_final: Если True, используется для финального биллинга (берем все дни периода).
                   Если False, для предварительного биллинга (ограничиваем текущей датой).
     """
-    # Для предварительного биллинга ограничиваем период текущей датой
     limit_to_today = not is_final
-    daily_totals = sum_daily_totals_by_code(contract["id"], period_start, period_end, limit_to_today=limit_to_today)
-    vehicle_qty = sum_vehicle_report_quantities(operations, period_start, period_end, limit_to_today=limit_to_today)
-    extra_totals = _sum_extra_entries(shifts, period_start, period_end)
-    reserved_m2 = _contract_reserved_area_m2(contract, period_end)
+    daily_totals = sum_daily_totals_by_code(contract["id"], period_start, billing_end, limit_to_today=limit_to_today)
+    vehicle_qty = sum_vehicle_report_quantities(operations, period_start, billing_end, limit_to_today=limit_to_today)
+    extra_totals = _sum_extra_entries(shifts, period_start, billing_end)
+    reserved_m2 = _contract_reserved_area_m2(contract, billing_end)
     return daily_totals, vehicle_qty, extra_totals, reserved_m2
 
 
@@ -411,13 +438,16 @@ class StorageBillingStrategy:
         snapshots = snapshots or []
         if period_start is None or period_end is None:
             period_start, period_end = _month_bounds(year, month)
-        days = (period_end - period_start).days + 1
+        # Предварительный биллинг начисляется только до текущей даты,
+        # а не за весь месяц.
+        billing_end = _billing_end(period_start, period_end, is_final)
+        days = _billing_days(period_start, billing_end)
         config = contract.get("billing_config") or {}
         lines: list[BillingLineResult] = []
         area_mode = config.get("area_mode", "two_tier")
 
         daily_totals, vehicle_qty, extra_totals, reserved_m2 = _build_billing_quantity_context(
-            contract, period_start, period_end, operations, shifts, is_final=is_final,
+            contract, period_start, billing_end, operations, shifts, is_final=is_final,
         )
         qty_ctx = {
             "operations": operations,
@@ -432,13 +462,13 @@ class StorageBillingStrategy:
 
         if area_mode == "two_tier":
             for area_code in ("storage_area_fixed", "storage_area_extra"):
-                tariff = _tariff_for_line(tariffs, area_code, period_end)
+                tariff = _tariff_for_line(tariffs, area_code, billing_end)
                 if not tariff:
                     continue
                 period_qty = resolve_tariff_period_quantity(
                     tariff,
                     period_start=period_start,
-                    period_end=period_end,
+                    period_end=billing_end,
                     **qty_ctx,
                 )
                 if area_code == "storage_area_fixed" and period_qty <= 0:
@@ -446,7 +476,7 @@ class StorageBillingStrategy:
                 if area_code == "storage_area_extra" and period_qty <= 0:
                     continue
                 segments = _tariff_line_segments(
-                    tariffs, area_code, period_start, period_end, days,
+                    tariffs, area_code, period_start, billing_end, days,
                 )
                 if not segments:
                     continue
@@ -491,10 +521,14 @@ class StorageBillingStrategy:
                 )
                 billed_codes.add(area_code)
         else:
-            total_m2days = sum(_d(s["area_m2"]) for s in snapshots)
-            t = _tariff_on(tariffs, "storage_area", period_end)
+            total_m2days = sum(
+                _d(s["area_m2"])
+                for s in snapshots
+                if _shift_snapshot_date(s) is None or _shift_snapshot_date(s) <= billing_end
+            )
+            t = _tariff_on(tariffs, "storage_area", billing_end)
             if not t:
-                t = _tariff_for_line(tariffs, "storage_area_fixed", period_end)
+                t = _tariff_for_line(tariffs, "storage_area_fixed", billing_end)
             if t and total_m2days > 0:
                 rate = _effective_rate(t)
                 amount = rate * total_m2days
@@ -533,14 +567,14 @@ class StorageBillingStrategy:
             period_qty = resolve_tariff_period_quantity(
                 tariff,
                 period_start=period_start,
-                period_end=period_end,
+                period_end=billing_end,
                 **qty_ctx,
             )
             if period_qty <= 0:
                 continue
 
             segments = _tariff_line_segments(
-                tariffs, bill_code, period_start, period_end, days,
+                tariffs, bill_code, period_start, billing_end, days,
             )
             if not segments:
                 continue

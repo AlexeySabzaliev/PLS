@@ -1,7 +1,7 @@
 """Расчёт биллинга по договору."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from app.db import db
@@ -34,13 +34,16 @@ def load_contract_dict(contract_id: int) -> dict | None:
 
 
 def load_shifts(warehouse_id: int, period_start: date, period_end: date) -> list[dict]:
-    """Складские отчёты с информацией о подтверждении дня."""
-    from app.modules.uss.services.shift_day_confirm import day_summary
-    
+    """Складские отчёты с информацией о подтверждении дня.
+
+    Загружаем и конец предыдущего периода: доп. площадь переносится с
+    последнего известного дня (выходные/пятидневка на стыке месяцев).
+    """
+    window_start = period_start - timedelta(days=35)
     rows = (
         ShiftReport.query.filter(
             ShiftReport.warehouse_id == warehouse_id,
-            ShiftReport.report_date >= period_start,
+            ShiftReport.report_date >= window_start,
             ShiftReport.report_date <= period_end,
         )
         .order_by(ShiftReport.report_date)
@@ -48,7 +51,6 @@ def load_shifts(warehouse_id: int, period_start: date, period_end: date) -> list
     )
     result = []
     for r in rows:
-        summary = day_summary(warehouse_id, r.report_date)
         result.append({
             "report_date": r.report_date,
             "area_entries": r.area_entries or {},

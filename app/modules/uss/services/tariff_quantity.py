@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from app.modules.uss.services.tariff_codes import (
@@ -240,9 +240,10 @@ def line_def(billing_line_code: str | None) -> LineQuantityDef | None:
 
 def effective_quantity_source(tariff: dict) -> str:
     """Источник количества: роль отчёта и реестр кодов важнее устаревшего quantity_source в БД.
-    
-    ВАЖНО: Если пользователь явно выбрал ручной источник (manual_vehicle, manual_daily, manual_inventory),
-    мы обязаны сохранить этот выбор, а не перезаписывать его логикой авто-расчета.
+
+    Явный ручной выбор сохраняется, когда ставка по реестру автоматическая
+    (пользователь переключил «Авто» → «Ручной ввод»). Для ставок с ручным
+    источником по реестру устаревший quantity_source чинится по роли/области (scope).
     """
     code = (tariff.get("billing_line_code") or "").strip()
     reg = line_def(code)
@@ -254,18 +255,21 @@ def effective_quantity_source(tariff: dict) -> str:
     # 1. Если явно указан режим "Только биллинг" — ничего не считаем
     if accounting == "billing_only":
         return "none"
-    
-    # 2. ГЛАВНОЕ ИСПРАВЛЕНИЕ:
-    # Если пользователь явно выбрал ручной источник, сохраняем его.
-    # Это позволяет переключать "Авто" -> "Ручной ввод на ТС" и сохранять это.
-    if explicit in MANUAL_INPUT_SOURCES:
+
+    # 2. Переключение автоматической ставки на ручной ввод — сохраняем выбор пользователя
+    #    (reg отсутствует → строка не автоматическая, применяется роль/scope)
+    if (
+        explicit in MANUAL_INPUT_SOURCES
+        and reg is not None
+        and reg.quantity_source in INTRINSIC_AUTO_SOURCES
+    ):
         return explicit
-    
+
     # 3. Если режим "Система" и ставка автоматическая (жестко задана) — используем авто
     if accounting == "system" and reg:
         return reg.quantity_source
 
-    # 4. Жестко автоматические коды (нельзя переключить на ручные через UI)
+    # 4. Жестко автоматические коды (без явного ручного выбора из шага 2)
     if reg and reg.quantity_source in INTRINSIC_AUTO_SOURCES:
         return reg.quantity_source
 
@@ -718,20 +722,51 @@ def avg_inventory_area_m2(
     calendar_days: int,
     billing_line_code: str,
 ) -> Decimal:
+    """Средняя площадь по всем календарным дням периода.
+
+    Занятая площадь сохраняется, пока введена новая величина: если за день
+    значения нет или оно нулевое (выходные, пятидневка, пропуск отчёта),
+    день получает значение предыдущего дня. Стартовое значение берётся из
+    последнего известного дня до начала периода.
+    """
     del calendar_days
-    daily_sum = Decimal("0")
-    days_with_data = 0
+    if period_end < period_start:
+        return Decimal("0")
+
+    by_date: dict[date, Decimal] = {}
     for shift in shifts:
         rd = _shift_report_date(shift)
-        if not (period_start <= rd <= period_end):
+        val = _area_value_for_code(shift.get("area_entries"), billing_line_code)
+        if val is None:
             continue
-        day_area = _area_value_for_code(shift.get("area_entries"), billing_line_code)
-        if day_area is not None:
-            daily_sum += day_area
-            days_with_data += 1
-    if days_with_data <= 0:
+        by_date[rd] = by_date.get(rd, Decimal("0")) + val
+
+    prior_dates = sorted(d for d in by_date if d < period_start)
+    in_dates = sorted(d for d in by_date if period_start <= d <= period_end and by_date[d] > 0)
+    if prior_dates:
+        # Продолжаем значение с последнего известного дня предыдущего периода
+        carry = by_date[prior_dates[-1]]
+    elif in_dates:
+        # Данных до периода нет: первая введённая площадь действует с начала периода
+        carry = by_date[in_dates[0]]
+    else:
         return Decimal("0")
-    return daily_sum / Decimal(days_with_data)
+
+    total = Decimal("0")
+    days = 0
+    d = period_start
+    while d <= period_end:
+        v = by_date.get(d)
+        if v is None or v <= 0:
+            v = carry
+        else:
+            carry = v
+        total += v
+        days += 1
+        d += timedelta(days=1)
+    if days <= 0:
+        return Decimal("0")
+    return total / Decimal(days)
 
 
 def parse_area_m2_from_text(text: str) -> Decimal:
@@ -794,6 +829,10 @@ def resolve_tariff_period_quantity(
             qty = extra_totals.get(code, Decimal("0"))
             if bill_code != code:
                 qty += extra_totals.get(bill_code, Decimal("0"))
+        if qty <= 0:
+            # Ручной ввод по ТС может лежать в отдельных колонках таблицы транспорта
+            # (extra_document_set_qty и т.п.), а не только в report_quantities.
+            qty = auto_vehicle_quantity(code, operations, period_start=period_start, period_end=period_end)
         return qty
 
     if source == "manual_daily":

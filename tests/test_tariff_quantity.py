@@ -257,6 +257,8 @@ def test_tariff_in_role_report_filters_auto_and_foreign_role():
 def test_avg_inventory_area_from_dict_entries():
     from app.modules.uss.services.tariff_quantity import avg_inventory_area_m2
 
+    # Занятая площадь сохраняется до следующего изменения: 1 июля = 100,
+    # со 2 июля и до конца месяца = 200 (перенос значения предыдущего дня).
     shifts = [
         {"report_date": date(2026, 7, 1), "area_entries": {"storage_area_extra": 100}},
         {"report_date": date(2026, 7, 2), "area_entries": {"storage_area_extra": 200}},
@@ -268,7 +270,45 @@ def test_avg_inventory_area_from_dict_entries():
         31,
         "storage_area_extra",
     )
-    assert avg == Decimal("150")
+    assert avg * Decimal(31) == Decimal(100) + Decimal(200) * Decimal(30)
+
+
+def test_avg_inventory_area_weekend_carry_forward():
+    from app.modules.uss.services.tariff_quantity import avg_inventory_area_m2
+
+    # Пятидневка: в пятницу ввели 500, выходные (17–18) без отчётов —
+    # площадь сохранилась, средняя по календарным дням = 500.
+    shifts = [
+        {"report_date": date(2026, 7, 16), "area_entries": {"storage_area_extra": 500}},
+        {"report_date": date(2026, 7, 19), "area_entries": {"storage_area_extra": 500}},
+    ]
+    avg = avg_inventory_area_m2(
+        shifts,
+        date(2026, 7, 16),
+        date(2026, 7, 19),
+        4,
+        "storage_area_extra",
+    )
+    assert avg == Decimal("500")
+
+
+def test_avg_inventory_area_seeded_from_previous_period():
+    from app.modules.uss.services.tariff_quantity import avg_inventory_area_m2
+
+    # Последнее значение июня (300) продолжает действовать в июле до изменения.
+    shifts = [
+        {"report_date": date(2026, 6, 30), "area_entries": {"storage_area_extra": 300}},
+        {"report_date": date(2026, 7, 16), "area_entries": {"storage_area_extra": 100}},
+    ]
+    avg = avg_inventory_area_m2(
+        shifts,
+        date(2026, 7, 1),
+        date(2026, 7, 16),
+        16,
+        "storage_area_extra",
+    )
+    expected = (Decimal(300) * Decimal(15) + Decimal(100)) / Decimal(16)
+    assert avg == expected
 
 
 def test_effective_source_inventory_overrides_wrong_daily():
